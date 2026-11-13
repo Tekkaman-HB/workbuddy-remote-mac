@@ -1,0 +1,10 @@
+<!-- [INPUT]: 独立双屏与助理双眼图形。[OUTPUT]: 可缩放的 Remote 品牌标识。[POS]: UI 品牌资源。
+[PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+<rect x="2" y="2" width="44" height="44" rx="12" fill="#0EAE94"/>
+<rect x="10" y="11" width="20" height="14" rx="3" stroke="#E8FFF8" stroke-width="1.7"/>
+<rect x="17" y="20" width="23" height="17" rx="3.5" fill="#F4FFFB"/>
+<rect x="18.5" y="21.5" width="20" height="13.2" rx="2.2" fill="#123D3A"/>
+<path d="M25 26v4M32 26v4" stroke="#5EE8C4" stroke-width="2" stroke-linecap="round"/>
+<path d="M28.5 37v3M24 40h9" stroke="#F4FFFB" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

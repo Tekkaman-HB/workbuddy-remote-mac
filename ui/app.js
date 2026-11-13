@@ -8,6 +8,7 @@ import { state, $, native, textOf, escapeHTML as esc } from "./state.js";
 import { paintIcons, icon } from "./icons.js";
 import { renderPage, renderSidebar, renderMessages, resetHistory, updateComposer, toast, banner } from "./view.js";
 import * as panels from "./panels.js";
+import { toggleSidebar } from "./motion.js";
 import {
   safe,
   requireConnection,
@@ -51,7 +52,7 @@ async function command(type, data = {}, anchor) {
       panels.searchDialog();
       break;
     case "collapse":
-      document.body.classList.toggle("collapsed");
+      toggleSidebar();
       break;
     case "showAll":
       state.showAll = !state.showAll;
@@ -157,7 +158,7 @@ async function command(type, data = {}, anchor) {
     case "about":
       information(
         "WorkBuddy Remote",
-        "0.2.1 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
+        "0.2.2 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
       );
       break;
     case "logout":
@@ -243,7 +244,7 @@ document.addEventListener("command", (e) => safe(() => command(e.detail.type, e.
 document.addEventListener("click", (e) => {
   const target = e.target.closest("button,[data-session]");
   if (!target) {
-    if (!e.target.closest("#popover")) panels.closePopover();
+    if (!e.target.closest("#popover")) panels.closePopover({ restoreFocus: false });
     return;
   }
   if (target.dataset.connect) {
@@ -387,8 +388,8 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Escape") {
-    if (!$("#popover").hidden) panels.closePopover();
-    else if (!$("#modal-layer").hidden) panels.closeModal();
+    if (!$("#popover").hidden && !$("#popover").inert) panels.closePopover();
+    else if (!$("#modal-layer").hidden && !$("#modal-layer").inert) panels.closeModal();
     else if (state.panel) {
       safe(() => panels.files());
     }
@@ -396,7 +397,7 @@ document.addEventListener("keydown", (e) => {
   }
   const modal = $("#modal-layer"),
     pop = $("#popover");
-  const scope = !pop.hidden ? pop : !modal.hidden ? modal : null;
+  const scope = !pop.hidden && !pop.inert ? pop : !modal.hidden && !modal.inert ? modal : null;
   if (scope && e.key === "Tab") {
     const focusable = [...scope.querySelectorAll('button:not(:disabled),input,select,[tabindex="0"]')].filter(
       (x) => !x.hidden,
@@ -434,6 +435,7 @@ window.nativeEvent = ({ type, data }) => {
   }
   if (type === "settings") panels.settings();
 };
+document.body.classList.add("wb-polished");
 paintIcons();
 panels.applyAppearance();
 matchMedia("(prefers-color-scheme:dark)").addEventListener("change", panels.applyAppearance);

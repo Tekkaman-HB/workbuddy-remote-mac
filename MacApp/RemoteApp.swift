@@ -31,6 +31,10 @@ final class RemoteDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHand
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        if let iconURL = Bundle.main.url(forResource: "WorkBuddyRemote", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = icon
+        }
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.userContentController.add(self, name: "native")

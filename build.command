@@ -11,7 +11,9 @@ npm run build:ui
 mkdir -p "$app_dir/Contents/Resources/UI/assets"
 cp work/ui-build/app.js ui/index.html ui/*.css "$app_dir/Contents/Resources/UI/"
 cp ui/assets/mascot.png "$app_dir/Contents/Resources/UI/assets/mascot.png"
-cp ui/assets/icon.icns "$app_dir/Contents/Resources/icon.icns"
+cp ui/assets/WorkBuddyRemote.icns "$app_dir/Contents/Resources/WorkBuddyRemote.icns"
+cp ui/assets/brand-mark.svg "$app_dir/Contents/Resources/UI/assets/brand-mark.svg"
+rm -f "$app_dir/Contents/Resources/icon.icns"
 xcrun swiftc -target "$(uname -m)-apple-macosx13.0" -parse-as-library -module-cache-path work/swift-module-cache \
   -framework AppKit -framework WebKit MacApp/SessionBridge.swift MacApp/RemoteApp.swift \
   -o "$app_dir/Contents/MacOS/WorkBuddyRemote"
@@ -24,8 +26,9 @@ cat > "$app_dir/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>WorkBuddy Remote</string>
 <key>CFBundleExecutable</key><string>WorkBuddyRemote</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleIconFile</key><string>icon.icns</string>
-<key>CFBundleShortVersionString</key><string>0.2.1</string>
+<key>CFBundleIconFile</key><string>WorkBuddyRemote.icns</string>
+<key>CFBundleVersion</key><string>20261113.4</string>
+<key>CFBundleShortVersionString</key><string>0.2.2</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

@@ -7,6 +7,7 @@
 import { state, $, escapeHTML as esc, visibleSessions, relativeDate, isRunning } from "./state.js";
 import { icon } from "./icons.js";
 import { blocks, messageActions } from "./render.js";
+import { enter, reveal, dismiss } from "./motion.js";
 export const suggestions = {
   办公: [
     "帮我整理今天的工作重点",
@@ -63,7 +64,7 @@ export function renderSidebar() {
   const others = all.filter((x) => !x.isPinned);
   $("#tasks").innerHTML =
     (pinned.length ? `<div class="section-heading">置顶 (${pinned.length})</div>${taskRows(pinned)}` : "") +
-    `<div class="section-heading">任务 (${others.length})${state.loading ? '<span class="spinner"></span>' : ""}</div>` +
+    `<div class="section-heading">任务 (${others.length})${state.loading ? '<span class="spinner" role="status" aria-label="加载中"></span>' : ""}</div>` +
     taskRows(state.showAll ? others : others.slice(0, 5)) +
     (others.length > 5
       ? `<button class="show-all" data-action="showAll">${state.showAll ? "收起任务" : `查看更多 (${others.length - 5})`}</button>`
@@ -93,6 +94,7 @@ export function renderSidebar() {
 export function updateTitle() {
   $("#conversation-title").textContent = state.view === "home" ? "" : state.session?.title || "新任务";
 }
+let previousView, previousScene;
 export function renderPage() {
   const home = state.view === "home";
   $("#home").hidden = !home;
@@ -117,6 +119,16 @@ export function renderPage() {
     .map((s) => `<button data-prompt="${esc(s)}">${esc(s)} <span>↗</span></button>`)
     .join("");
   $("#prompt").placeholder = home ? "今天帮你做些什么？" : "继续向远端 WorkBuddy 发送消息";
+  document
+    .querySelector(".scene-switch")
+    .style.setProperty("--scene-index", String(["办公", "开发", "设计"].indexOf(state.scene)));
+  if (previousView !== state.view) enter(home ? $("#home") : $("#chat"), { distance: 5 });
+  else if (home && previousScene !== state.scene) {
+    enter($("#quick-prompts"), { distance: 4, duration: 180 });
+    enter($("#suggestions"), { distance: 5, duration: 220 });
+  }
+  previousView = state.view;
+  previousScene = state.scene;
   updateComposer();
   renderSidebar();
 }
@@ -156,8 +168,8 @@ export function resetHistory() {
 }
 function requestHTML(record) {
   return `${record.userMessage ? `<div class="user-message"><div class="user-bubble">${blocks(record.userMessage)}</div></div>` : ""}
-    <div class="assistant-label"><span class="buddy-icon">${icon("owl")}</span>WorkBuddy ${isRunning(record.state) ? '<span class="spinner"></span>' : ""}</div>
-    <div class="assistant-message">${blocks(record.assistantMessage) || `<div class="reply-status">${isRunning(record.state) ? '<span class="spinner"></span>正在处理…' : "暂无回复内容"}</div>`}</div>${messageActions(record)}`;
+    <div class="assistant-label"><span class="buddy-icon">${icon("owl")}</span>WorkBuddy ${isRunning(record.state) ? '<span class="spinner" role="status" aria-label="加载中"></span>' : ""}</div>
+    <div class="assistant-message">${blocks(record.assistantMessage) || `<div class="reply-status">${isRunning(record.state) ? '<span class="spinner" role="status" aria-label="加载中"></span>正在处理…' : "暂无回复内容"}</div>`}</div>${messageActions(record)}`;
 }
 export function renderMessages(forceBottom = false) {
   const root = $("#messages"),
@@ -181,7 +193,7 @@ export function renderMessages(forceBottom = false) {
     root.insertAdjacentHTML(
       "beforeend",
       state.loading
-        ? '<div class="reply-status"><span class="spinner"></span>正在读取远端会话…</div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>'
+        ? '<div class="reply-status"><span class="spinner" role="status" aria-label="加载中"></span>正在读取远端会话…</div><div class="loading-skeleton"></div><div class="loading-skeleton"></div>'
         : '<div class="empty">任务已就绪，发送消息开始对话</div>',
     );
   }
@@ -195,6 +207,7 @@ export function renderMessages(forceBottom = false) {
       const node = document.createElement("article");
       node.className = "request";
       node.dataset.request = record.id;
+      if (messageNodes.size && record === state.records.at(-1)) enter(node, { distance: 4, duration: 180 });
       entry = { node, signature: null };
       messageNodes.set(record.id, entry);
     }
@@ -224,10 +237,10 @@ export function renderMessages(forceBottom = false) {
 export function toast(text) {
   const el = $("#toast");
   el.textContent = text;
-  el.hidden = false;
+  reveal(el, { kind: "toast" });
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => {
-    el.hidden = true;
+    dismiss(el, { kind: "toast" });
   }, 6000);
 }
 export function banner(text) {

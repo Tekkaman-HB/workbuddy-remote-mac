@@ -165,6 +165,9 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     panels.settings();
     const sections = [...document.querySelectorAll("[data-settings-section]")].map((el) => el.dataset.settingsSection);
     assert.deepEqual(sections, ["通用", "外观", "快捷键", "模型", "设备连接"]);
+    const settingsSearch = document.querySelector("#settings-search");
+    panels.settings("外观");
+    assert.equal(document.querySelector("#settings-search"), settingsSearch);
     panels.closeModal();
     await panels.catalog("skills");
     assert.ok(document.querySelector("article.catalog-card"));

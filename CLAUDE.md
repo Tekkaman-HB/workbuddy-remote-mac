@@ -5,7 +5,8 @@ Swift + AppKit + WebKit + JavaScript + marked + DOMPurify + esbuild + Web Crypto
 lib/ - 通道凭证、SDK 装载和远程命令验证 (0 子目录)
 MacApp/ - AppKit 原生窗口、受限 UI 桥和 WebKit 自主登录 (0 子目录)
 ui/ - 对照本机 WorkBuddy 的内置界面，按接口能力裁剪入口并净化消息 (1 子目录: assets)
-tests/ - 协议边界与凭证保护测试 (0 子目录)
+tests/ - 协议边界、凭证保护、页面流程与动效生命周期测试 (0 子目录)
+tools/ - 独立应用图标的 AppKit 矢量源与生成工具 (0 子目录)
 docs/ - 验证报告与协议边界 (0 子目录)
 work/ - 私有取证、临时凭证与构建缓存，不进入版本控制
 </directory>

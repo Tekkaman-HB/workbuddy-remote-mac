@@ -1,0 +1,479 @@
+/*
+ * [INPUT]: 现有主题令牌、motion.js 与 ui-craft / motion-match 的动效合同。
+ * [OUTPUT]: 统一微交互、侧栏滑动、焦点、场景指示器和精细视觉状态。
+ * [POS]: UI 的最后一层视觉精修；不引入业务功能或动画依赖。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
+ */
+:root {
+  --wb-fast: 110ms;
+  --wb-normal: 220ms;
+  --wb-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --wb-focus: 0 0 0 3px #14b89e17;
+}
+body.wb-polished button {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--wb-fast),
+    color var(--wb-fast),
+    opacity var(--wb-fast),
+    transform 90ms ease-out;
+}
+body.wb-polished button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+body.wb-polished button:disabled:hover {
+  background-color: transparent;
+}
+body.wb-polished button:focus-visible {
+  outline-width: 2px;
+  outline-offset: 3px;
+}
+body.wb-polished .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.65;
+  vertical-align: middle;
+  shape-rendering: geometricPrecision;
+}
+body.wb-polished .brand {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 22px 22px;
+}
+.wb-brand-mark {
+  width: 35px;
+  height: 35px;
+  flex: none;
+  filter: drop-shadow(0 2px 2px #043c3210);
+}
+body.wb-polished .brand b {
+  font-size: 14px;
+  letter-spacing: -0.25px;
+}
+body.wb-polished .brand small {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  margin-top: 3px;
+}
+body.wb-polished #navigation button {
+  height: 36px;
+  gap: 10px;
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+body.wb-polished #navigation button.active {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px #00000003;
+}
+body.wb-polished .sidebar-tools button,
+body.wb-polished #titlebar button,
+body.wb-polished #account > button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+body.wb-polished .sidebar-tools .icon {
+  width: 19px;
+  height: 19px;
+}
+body.wb-polished #titlebar .icon {
+  width: 18px;
+  height: 18px;
+}
+body.wb-polished #account {
+  padding: 0 18px;
+  gap: 9px;
+}
+body.wb-polished .avatar {
+  box-shadow: inset 0 0 0 1px #00000008;
+}
+body.wb-polished #device-button .connection-dot {
+  width: 6px;
+  height: 6px;
+  right: 3px;
+  bottom: 3px;
+}
+body.wb-polished .task-row {
+  height: 34px;
+  transition: background-color var(--wb-fast);
+}
+body.wb-polished .task-row .task-title {
+  font-size: 13px;
+  letter-spacing: 0.02px;
+}
+body.wb-polished .task-row time {
+  font-variant-numeric: tabular-nums;
+  transition: opacity var(--wb-fast);
+}
+body.wb-polished .task-row .task-menu {
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 7px;
+}
+body.wb-polished .task-row:hover time,
+body.wb-polished .task-row:focus-within time {
+  display: block;
+  opacity: 0;
+}
+body.wb-polished .task-row:hover .task-menu,
+body.wb-polished .task-row:focus-within .task-menu {
+  opacity: 1;
+  pointer-events: auto;
+}
+body.wb-polished .task-row .task-menu .icon {
+  width: 16px;
+  height: 16px;
+}
+body.wb-polished .section-heading {
+  letter-spacing: 0.2px;
+  font-size: 11px;
+}
+body.wb-polished .space-row {
+  padding: 9px 12px;
+}
+body.wb-polished .space-row .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+body.wb-polished #app {
+  position: relative;
+}
+body.wb-polished #sidebar {
+  display: flex;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 4;
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  transition:
+    transform 260ms var(--wb-ease),
+    opacity 180ms ease,
+    visibility 0ms;
+}
+body.wb-polished #main {
+  margin-left: var(--sidebar-width);
+}
+body.wb-polished.collapsed #main {
+  margin-left: 0;
+}
+body.wb-polished.collapsed #sidebar {
+  display: flex;
+  transform: translateX(-100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 260ms var(--wb-ease),
+    opacity 180ms ease,
+    visibility 0ms 260ms;
+}
+body.wb-polished .scene-switch {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 234px;
+  isolation: isolate;
+}
+body.wb-polished .scene-switch button {
+  z-index: 1;
+  position: relative;
+  min-width: 0;
+  font-size: 14px;
+  gap: 6px;
+}
+body.wb-polished .scene-switch button.active {
+  background: transparent;
+  box-shadow: none;
+}
+.wb-scene-indicator {
+  position: absolute;
+  inset: 2px auto 2px 2px;
+  width: calc((100% - 4px) / 3);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow:
+    0 1px 4px #00000010,
+    inset 0 0 0 1px #00000003;
+  transform: translateX(calc(var(--scene-index, 0) * 100%));
+  transition: transform 300ms var(--wb-ease);
+  pointer-events: none;
+  z-index: 0;
+}
+body.wb-polished #quick-prompts button {
+  font-size: 13px;
+  padding: 6px 12px;
+  background: var(--surface);
+}
+body.wb-polished #quick-prompts button:hover {
+  background: var(--hover);
+  border-color: #cfd4d2;
+}
+body.wb-polished #suggestions button {
+  font-size: 13px;
+  min-height: 37px;
+  gap: 12px;
+  box-shadow: 0 2px 4px #00000003;
+}
+body.wb-polished #suggestions button span {
+  font-size: 16px;
+  color: var(--muted);
+  transition:
+    transform 180ms var(--wb-ease),
+    color var(--wb-fast);
+}
+body.wb-polished #suggestions button:hover span {
+  transform: translate(2px, -2px);
+  color: var(--text);
+}
+body.wb-polished .composer {
+  border-color: var(--border);
+  box-shadow: 0 4px 18px #00000004;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+body.wb-polished .composer:focus-within {
+  border-color: #1ba88e70;
+  box-shadow:
+    var(--wb-focus),
+    0 7px 22px #00000005;
+}
+body.wb-polished .composer-toolbar {
+  gap: 9px;
+}
+body.wb-polished #send-button,
+body.wb-polished #stop-button {
+  width: 32px !important;
+  box-shadow: 0 1px 2px #00000008;
+}
+body.wb-polished #send-button:not(:disabled):hover {
+  background: #24413c;
+  transform: translateY(-1px);
+}
+body.wb-polished #send-button:disabled:hover {
+  background: #ccc;
+}
+body.wb-polished #send-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+body.wb-polished .permission {
+  font-size: 12px;
+}
+body.wb-polished .permission .icon {
+  width: 15px;
+  height: 15px;
+}
+body.wb-polished #model-button {
+  font-size: 12px;
+  padding: 5px 7px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+body.wb-polished #chat .permission {
+  min-width: 0;
+  max-width: 120px;
+  overflow: hidden;
+}
+body.wb-polished #popover {
+  border-color: #0000000c;
+  box-shadow:
+    0 12px 38px #00000012,
+    0 2px 6px #00000006;
+  padding: 6px;
+  border-radius: 14px;
+}
+body.wb-polished #popover[data-placement="above"] {
+  transform-origin: center bottom;
+}
+body.wb-polished #popover[data-placement="below"] {
+  transform-origin: center top;
+}
+body.wb-polished .menu-row {
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  gap: 10px;
+}
+body.wb-polished .menu-row > .icon {
+  width: 17px;
+  height: 17px;
+  color: var(--muted);
+}
+body.wb-polished .menu-row > .check {
+  color: var(--teal);
+  width: 15px;
+  height: 15px;
+}
+body.wb-polished .menu-row.danger {
+  color: var(--red);
+}
+body.wb-polished .menu-row.danger > .icon {
+  color: var(--red);
+}
+body.wb-polished .menu-row.danger:hover {
+  background: #b6384c0c;
+}
+body.wb-polished .menu-row.selected {
+  background: var(--hover);
+}
+body.wb-polished .menu-title {
+  letter-spacing: 0.15px;
+  padding: 9px 10px;
+}
+body.wb-polished .device-card {
+  border-color: var(--border);
+  padding: 13px 12px;
+  gap: 12px;
+}
+body.wb-polished .device-card > .icon {
+  color: var(--muted);
+  stroke-width: 1.5;
+}
+body.wb-polished .device-card.selected {
+  background: #14b89e09;
+  border-color: #14b89e55;
+}
+body.wb-polished #modal-layer {
+  background: #13221d30;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+body.wb-polished .dialog {
+  border-color: #ffffff66;
+  border-radius: 18px;
+  box-shadow:
+    0 24px 90px #00000026,
+    0 1px 3px #00000008;
+}
+body.wb-polished .dialog-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+body.wb-polished .dialog input:not([type="range"]) {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+body.wb-polished .dialog input:not([type="range"]):focus {
+  border-color: #1ba88e70;
+  box-shadow: var(--wb-focus);
+}
+body.wb-polished .search-box input:focus {
+  box-shadow: none;
+  border-color: transparent;
+}
+body.wb-polished .settings-nav {
+  padding: 22px 16px;
+  border-right: 1px solid #00000003;
+}
+body.wb-polished .settings-nav .menu-row {
+  font-size: 13px;
+  min-height: 35px;
+}
+body.wb-polished .setting-card {
+  box-shadow: 0 1px 2px #00000002;
+}
+body.wb-polished .setting-row label {
+  font-size: 13px;
+}
+body.wb-polished .setting-row small {
+  font-size: 12px;
+}
+body.wb-polished input[type="range"] {
+  accent-color: var(--teal);
+}
+body.wb-polished .catalog-card {
+  gap: 10px;
+  border-radius: 12px;
+  padding: 18px;
+}
+body.wb-polished button.catalog-card:hover {
+  border-color: #14b89e55;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px #00000004;
+}
+body.wb-polished article.catalog-card {
+  cursor: default;
+}
+body.wb-polished .catalog-card > .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--teal);
+}
+body.wb-polished .buddy-icon {
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+body.wb-polished .buddy-icon .icon {
+  width: 17px;
+  height: 17px;
+}
+body.wb-polished .message-actions button:hover {
+  color: var(--text);
+}
+body.wb-polished .code-header {
+  height: 36px;
+  font-size: 11px;
+}
+body.wb-polished .copy-code {
+  padding: 4px 5px;
+  border-radius: 5px;
+}
+body.wb-polished #scroll-bottom {
+  background: var(--surface);
+  transition:
+    background-color var(--wb-fast),
+    transform var(--wb-fast);
+}
+body.wb-polished #scroll-bottom:hover {
+  transform: translateY(2px);
+}
+body.wb-polished #toast {
+  font-size: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 5px 20px #00000014;
+}
+body.wb-polished .connection-dot {
+  transition: background-color 180ms ease;
+}
+:root[data-theme="dark"] body.wb-polished #popover {
+  border-color: #ffffff12;
+  box-shadow: 0 16px 40px #0005;
+}
+:root[data-theme="dark"] body.wb-polished .dialog {
+  border-color: #ffffff12;
+}
+:root[data-theme="dark"] body.wb-polished .composer:focus-within {
+  border-color: #35c8ad75;
+}
+:root[data-theme="dark"] body.wb-polished #send-button:not(:disabled):hover {
+  background: #d4e8df;
+  color: #18352d;
+}
+@media (max-width: 1100px) {
+  body.wb-polished:has(#file-panel:not([hidden])) {
+    --sidebar-width: 230px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.wb-polished *,
+  body.wb-polished *::before,
+  body.wb-polished *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  body.wb-polished.collapsed #sidebar {
+    visibility: hidden;
+  }
+}

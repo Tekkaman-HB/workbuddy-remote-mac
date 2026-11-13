@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="chat.css" />
     <link rel="stylesheet" href="panels.css" />
+    <link rel="stylesheet" href="motion.css" />
   </head>
   <body>
     <div id="app">
@@ -23,7 +24,8 @@
           ><button data-action="filter" aria-label="筛选任务" data-icon="filter"></button>
         </div>
         <div class="brand">
-          <div><b>WorkBuddy</b><small>Remote · Mac</small></div>
+          <img class="wb-brand-mark" src="assets/brand-mark.svg" alt="WorkBuddy Remote" />
+          <div><b>WorkBuddy</b><small>REMOTE · MAC</small></div>
         </div>
         <nav id="navigation"></nav>
         <div id="sidebar-scroll">
@@ -53,7 +55,8 @@
           <div class="scene-switch" role="radiogroup" aria-label="任务场景">
             <button class="active" role="radio" aria-checked="true" data-scene="办公">办公</button
             ><button role="radio" aria-checked="false" data-scene="开发">开发</button
-            ><button role="radio" aria-checked="false" data-scene="设计">设计</button>
+            ><button role="radio" aria-checked="false" data-scene="设计">设计</button
+            ><span class="wb-scene-indicator" aria-hidden="true"></span>
           </div>
           <div id="home-content">
             <div id="quick-prompts"></div>

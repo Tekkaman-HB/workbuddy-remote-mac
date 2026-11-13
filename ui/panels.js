@@ -7,16 +7,18 @@
 import { state, $, native, rpc, listItems, escapeHTML as esc } from "./state.js";
 import { icon } from "./icons.js";
 import { toast, taskRows } from "./view.js";
+import { reveal, dismiss, enter, layoutChange } from "./motion.js";
 export const action = (type, data = {}) =>
   document.dispatchEvent(new CustomEvent("command", { detail: { type, ...data } }));
 let anchorElement = null,
   previousFocus = null,
   modalGeneration = 0;
-export function closePopover() {
+export function closePopover({ immediate = false, restoreFocus = true } = {}) {
   const p = $("#popover");
-  p.hidden = true;
-  p.innerHTML = "";
-  anchorElement?.focus({ preventScroll: true });
+  const previous = anchorElement;
+  dismiss(p, { immediate, onHidden: () => p.replaceChildren() });
+  previous?.setAttribute("aria-expanded", "false");
+  if (restoreFocus && previous?.isConnected) previous.focus({ preventScroll: true });
   anchorElement = null;
 }
 export function popover(anchor, html, width = 240) {
@@ -24,7 +26,7 @@ export function popover(anchor, html, width = 240) {
     closePopover();
     return;
   }
-  closePopover();
+  closePopover({ immediate: true, restoreFocus: false });
   anchorElement = anchor;
   const p = $("#popover");
   p.style.width = width + "px";
@@ -33,27 +35,35 @@ export function popover(anchor, html, width = 240) {
   const rect = anchor.getBoundingClientRect();
   const height = p.offsetHeight;
   p.style.left = Math.min(Math.max(10, rect.left), innerWidth - width - 10) + "px";
-  p.style.top =
-    (rect.bottom + height + 12 > innerHeight ? Math.max(10, rect.top - height - 8) : rect.bottom + 8) + "px";
+  const above = rect.bottom + height + 12 > innerHeight;
+  p.dataset.placement = above ? "above" : "below";
+  p.style.top = (above ? Math.max(10, rect.top - height - 8) : rect.bottom + 8) + "px";
+  p.setAttribute("role", "dialog");
+  p.setAttribute("aria-label", p.querySelector(".menu-title")?.textContent ?? "操作菜单");
+  anchor.setAttribute("aria-expanded", "true");
+  anchor.setAttribute("aria-controls", "popover");
+  reveal(p);
+  p.querySelectorAll('[data-danger="true"]').forEach((button) => button.classList.add("danger"));
   p.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
 }
 export function row(label, type, i = "", extra = "", attrs = "") {
   return `<button class="menu-row" data-command="${type}" ${attrs}>${i ? icon(i) : ""}<span class="name">${esc(label)}</span>${extra}</button>`;
 }
-export function closeModal() {
+export function closeModal({ immediate = false } = {}) {
   modalGeneration++;
   const el = $("#modal-layer");
-  el.hidden = true;
-  el.innerHTML = "";
+  dismiss(el, { kind: "backdrop", immediate, onHidden: () => el.replaceChildren() });
   previousFocus?.focus({ preventScroll: true });
   previousFocus = null;
 }
 export function modal(html, cls = "dialog") {
-  closePopover();
-  previousFocus = document.activeElement;
+  closePopover({ immediate: true, restoreFocus: false });
   const root = $("#modal-layer");
-  root.hidden = false;
+  const replacing = !root.hidden && !root.inert;
+  if (!replacing) previousFocus = document.activeElement;
   root.innerHTML = `<section class="${cls}" role="dialog" aria-modal="true">${html}</section>`;
+  reveal(root, { kind: "backdrop", immediate: replacing });
+  enter(root.firstElementChild, { distance: 7, duration: 220 });
   root.querySelector("input,button,select,textarea")?.focus({ preventScroll: true });
   return ++modalGeneration;
 }
@@ -61,7 +71,7 @@ export function confirmDialog(title, description, onConfirm, { initial, destruct
   modal(
     `<h2>${esc(title)}</h2><p>${esc(description)}</p>${initial !== undefined ? `<input id="dialog-input" aria-label="${esc(title)}" value="${esc(initial)}">` : ""}<div class="dialog-actions"><button class="button" id="dialog-cancel">取消</button><button class="button ${destructive ? "danger" : "primary"}" id="dialog-confirm">确定</button></div>`,
   );
-  $("#dialog-cancel").onclick = closeModal;
+  $("#dialog-cancel").onclick = () => closeModal();
   $("#dialog-confirm").onclick = () => {
     const value = $("#dialog-input")?.value;
     closeModal();
@@ -182,7 +192,7 @@ export function taskMenu(anchor, id) {
       row(s.isPinned ? "取消置顶" : "置顶", "pin", "pin", "", `data-session-id="${esc(id)}"`) +
       row("归档", "archive", "archive", "", `data-session-id="${esc(id)}"`) +
       `<div class="menu-separator"></div>` +
-      row("删除", "delete", "trash", "", `data-session-id="${esc(id)}"`),
+      row("删除", "delete", "trash", "", `data-session-id="${esc(id)}" data-danger="true"`),
     200,
   );
 }
@@ -218,7 +228,7 @@ export async function catalog(tab = "experts") {
       .map(([k, v]) => `<button data-catalog-tab="${k}" class="${tab === k ? "active" : ""}">${v}</button>`)
       .join(
         "",
-      )}</div><div class="catalog-grid"><div class="empty"><span class="spinner"></span> 正在读取远端${labels[tab]}…</div></div>`,
+      )}</div><div class="catalog-grid"><div class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取远端${labels[tab]}…</div></div>`,
     "dialog catalog-dialog",
   );
   try {
@@ -255,19 +265,27 @@ function settingsSections() {
 export function settings(section = "通用") {
   const sections = settingsSections();
   if (!Object.values(sections).flat().includes(section)) section = "通用";
-  modal(
-    `<aside class="settings-nav"><input id="settings-search" aria-label="搜索设置项" placeholder="搜索设置项">${Object.entries(
-      sections,
-    )
-      .map(
-        ([g, items]) =>
-          `<div class="menu-title">${g}</div>${items.map((x) => `<button class="menu-row ${section === x ? "selected" : ""}" data-settings-section="${x}">${x}</button>`).join("")}`,
+  const reuse = !$("#modal-layer").hidden && !$("#modal-layer").inert && Boolean(document.querySelector(".settings"));
+  if (reuse) {
+    document.querySelector(".settings-body h2").textContent = section;
+    document
+      .querySelectorAll("[data-settings-section]")
+      .forEach((button) => button.classList.toggle("selected", button.dataset.settingsSection === section));
+  } else {
+    modal(
+      `<aside class="settings-nav"><input id="settings-search" aria-label="搜索设置项" placeholder="搜索设置项">${Object.entries(
+        sections,
       )
-      .join(
-        "",
-      )}</aside><div class="settings-body"><button class="dialog-close" data-command="closeModal" aria-label="关闭设置">${icon("close")}</button><h2>${section}</h2><div id="settings-content"></div></div>`,
-    "dialog settings",
-  );
+        .map(
+          ([g, items]) =>
+            `<div class="menu-title">${g}</div>${items.map((x) => `<button class="menu-row ${section === x ? "selected" : ""}" data-settings-section="${x}">${x}</button>`).join("")}`,
+        )
+        .join(
+          "",
+        )}</aside><div class="settings-body"><button class="dialog-close" data-command="closeModal" aria-label="关闭设置">${icon("close")}</button><h2>${section}</h2><div id="settings-content"></div></div>`,
+      "dialog settings",
+    );
+  }
   $("#settings-search").oninput = () => {
     const q = $("#settings-search").value;
     document.querySelectorAll("[data-settings-section]").forEach((b) => (b.hidden = !b.textContent.includes(q)));
@@ -322,7 +340,7 @@ export function settings(section = "通用") {
     );
   else if (section === "通用")
     html = card(
-      setting("WorkBuddy Remote", "独立账号登录 · 本地任务远程接入 · 0.2.1") +
+      setting("WorkBuddy Remote", "独立账号登录 · 本地任务远程接入 · 0.2.2") +
         setting(
           "连接状态",
           state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接",
@@ -332,6 +350,7 @@ export function settings(section = "通用") {
         setting("刷新方式", "会话历史每 2 秒读取一次，任务列表每 30 秒刷新。"),
     );
   $("#settings-content").innerHTML = html;
+  if (reuse) enter($("#settings-content"), { distance: 4, duration: 180 });
   if ($("#theme-select")) {
     const select = $("#theme-select");
     select.value = localStorage.getItem("theme") ?? "system";
@@ -354,9 +373,13 @@ export function applyAppearance() {
 export async function files() {
   state.panel = !state.panel;
   const p = $("#file-panel");
-  p.hidden = !state.panel;
-  if (!state.panel) return;
-  p.innerHTML = `<header><strong>任务文件</strong><button data-command="files" aria-label="关闭文件面板">${icon("close")}</button></header><div id="file-list" class="empty">${state.session ? '<span class="spinner"></span> 读取远端文件…' : "选择任务后查看产出文件"}</div>`;
+  document.querySelector('[data-action="files"]')?.setAttribute("aria-expanded", String(state.panel));
+  if (!state.panel) {
+    dismiss(p, { kind: "drawer" });
+    return;
+  }
+  layoutChange(() => reveal(p, { kind: "drawer" }));
+  p.innerHTML = `<header><strong>任务文件</strong><button data-command="files" aria-label="关闭文件面板">${icon("close")}</button></header><div id="file-list" class="empty">${state.session ? '<span class="spinner" role="status" aria-label="加载中"></span> 读取远端文件…' : "选择任务后查看产出文件"}</div>`;
   if (!state.session) return;
   const id = state.session.id;
   try {
@@ -403,7 +426,7 @@ export async function fileDetail(index) {
 }
 export async function automations() {
   const gen = modal(
-    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>定时任务</h2><div class="menu-note">远端 Mac 的定时任务 · 只读</div><div id="automation-list" class="empty"><span class="spinner"></span> 正在读取…</div>`,
+    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>定时任务</h2><div class="menu-note">远端 Mac 的定时任务 · 只读</div><div id="automation-list" class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取…</div>`,
     "dialog catalog-dialog",
   );
   try {
