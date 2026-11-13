@@ -1,0 +1,19 @@
+{
+  "name": "workbuddy-remote-mac",
+  "private": true,
+  "version": "0.2.1",
+  "type": "module",
+  "scripts": {
+    "build:ui": "esbuild ui/app.js --bundle --format=iife --platform=browser --target=safari16 --outfile=work/ui-build/app.js",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.0",
+    "marked": "^17.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "jsdom": "^31.0.0",
+    "prettier": "^3.10.1"
+  }
+}
