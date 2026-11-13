@@ -20,7 +20,6 @@ export const state = {
   loading: false,
   sending: false,
   hasOlder: false,
-  scene: "办公",
   workspace: null,
   draft: "",
   search: "",
@@ -68,24 +67,43 @@ export async function rpc(method, ...values) {
   if (result?.errorCode) throw new Error(result.message ?? result.errorCode);
   return result;
 }
-const listKeys = ["items", "models", "experts", "skills", "connectors", "workspaces", "list"];
+const listKeys = [
+  "items",
+  "models",
+  "experts",
+  "skills",
+  "connectors",
+  "workspaces",
+  "list",
+];
 export function isListResult(result) {
-  return Array.isArray(result) || listKeys.some((key) => Array.isArray(result?.[key]));
+  return (
+    Array.isArray(result) ||
+    listKeys.some((key) => Array.isArray(result?.[key]))
+  );
 }
 export function listItems(result) {
   if (Array.isArray(result)) return result;
-  for (const key of listKeys) if (Array.isArray(result?.[key])) return result[key];
+  for (const key of listKeys)
+    if (Array.isArray(result?.[key])) return result[key];
   return [];
 }
 export function mergeRecords(old, incoming, older = false) {
   const map = new Map();
-  for (const item of older ? [...incoming, ...old] : [...old, ...incoming]) map.set(item.id, item);
-  return [...map.values()].sort((a, b) => (a.requestSeq ?? a.timestamp ?? 0) - (b.requestSeq ?? b.timestamp ?? 0));
+  for (const item of older ? [...incoming, ...old] : [...old, ...incoming])
+    map.set(item.id, item);
+  return [...map.values()].sort(
+    (a, b) =>
+      (a.requestSeq ?? a.timestamp ?? 0) - (b.requestSeq ?? b.timestamp ?? 0),
+  );
 }
 export function escapeHTML(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
   );
 }
 export const $ = (s) => document.querySelector(s);
@@ -95,9 +113,15 @@ export function textOf(value) {
   return value?.text ?? textOf(value?.content ?? "");
 }
 export const isRunning = (value) =>
-  ["running", "pending", "working", "queued", "processing", "generating", "streaming"].includes(
-    String(value ?? "").toLowerCase(),
-  );
+  [
+    "running",
+    "pending",
+    "working",
+    "queued",
+    "processing",
+    "generating",
+    "streaming",
+  ].includes(String(value ?? "").toLowerCase());
 export function visibleSessions() {
   return state.sessions.filter(
     (s) =>

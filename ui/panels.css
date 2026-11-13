@@ -204,11 +204,6 @@
 .search-results .task-row {
   height: 42px;
 }
-.search-hint {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 12px 8px 0;
-}
 .settings {
   width: 900px;
   height: 680px;
@@ -438,19 +433,8 @@
     padding-left: 28px;
     padding-right: 28px;
   }
-  #quick-prompts {
-    gap: 6px;
-    padding-right: 0;
-  }
-  #quick-prompts button {
-    font-size: 12px;
-    padding: 5px 9px;
-  }
-  .mascot {
-    right: 22px;
-  }
   #home-content {
-    margin-top: 56px;
+    margin-top: 24px;
   }
   .composer-toolbar > .permission {
     max-width: 110px;
@@ -472,18 +456,10 @@
 }
 @media (max-height: 680px) {
   #home {
-    padding-top: 0;
+    padding-top: 56px;
   }
   #home-content {
-    margin-top: 38px;
-  }
-  #suggestions {
     margin-top: 24px;
-    gap: 8px;
-  }
-  #suggestions button {
-    min-height: 32px;
-    padding: 5px 14px;
   }
   #home h1 {
     font-size: 28px;

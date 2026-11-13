@@ -25,15 +25,6 @@
   position: relative;
   padding: 14px 16px 10px;
 }
-.mascot {
-  position: absolute;
-  width: 66px;
-  height: 66px;
-  object-fit: contain;
-  right: 37px;
-  top: -64px;
-  pointer-events: none;
-}
 .composer textarea {
   display: block;
   resize: none;
@@ -79,12 +70,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 3px 4px;
-  display: block;
+  display: inline-flex;
   white-space: nowrap;
-}
-#model-button span {
-  color: var(--muted);
-  margin-left: 4px;
 }
 #send-button,
 #stop-button {
@@ -136,9 +123,6 @@
   display: none;
 }
 #chat .workspace-tray {
-  display: none;
-}
-#chat .mascot {
   display: none;
 }
 #chat .composer textarea {
@@ -426,14 +410,6 @@ summary::-webkit-details-marker {
 .message-actions .icon {
   width: 15px;
   height: 15px;
-}
-.disclaimer {
-  height: 28px;
-  text-align: center;
-  font-size: 10px;
-  color: #aaa;
-  padding: 8px 0;
-  flex: none;
 }
 #chat-composer-slot {
   padding: 0 32px;

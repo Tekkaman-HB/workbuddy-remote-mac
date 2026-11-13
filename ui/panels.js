@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖共享 state、受限 rpc、视图提示和图标。
- * [OUTPUT]: 设备/模型/权限菜单、目录、账户、设置和文件面板。
+ * [OUTPUT]: 精简说明的设备/模型/权限菜单、目录、账户、设置和文件面板。
  * [POS]: UI 的次级交互，实际会话变更交给 app.js。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -84,7 +84,7 @@ export function confirmDialog(title, description, onConfirm, { initial, destruct
 }
 export function deviceMenu(anchor) {
   const content =
-    `<div class="menu-title">设备连接 · 任务在所选 Mac 上执行</div>` +
+    `<div class="menu-title">设备连接</div>` +
     (state.devices.length
       ? state.devices
           .map(
@@ -101,7 +101,7 @@ export function deviceMenu(anchor) {
 export function modelMenu(anchor) {
   popover(
     anchor,
-    `<div class="menu-title">选择模型 · 来自远端 Mac</div>` +
+    `<div class="menu-title">选择模型</div>` +
       (state.models.length
         ? state.models
             .map((m, i) => {
@@ -144,8 +144,7 @@ export function permissionMenu(anchor) {
         "permissionFull",
         "shield",
         state.config.permissionMode === "fullAccess" ? icon("check", "check") : "",
-      ) +
-      '<div class="menu-note">权限应用于当前任务，远端 Mac 执行操作前遵循此设置。</div>',
+      ),
     270,
   );
 }
@@ -164,8 +163,7 @@ export function workspaceMenu(anchor) {
             `data-index="${i}"`,
           ),
         )
-        .join("") +
-      '<div class="menu-note">工作空间在创建任务时确定。</div>',
+        .join(""),
     320,
   );
 }
@@ -198,7 +196,7 @@ export function taskMenu(anchor, id) {
 }
 export function searchDialog() {
   modal(
-    `<div class="search-box">${icon("search")}<input id="search-input" aria-label="搜索任务" placeholder="搜索任务" autocomplete="off"><button data-command="closeModal" aria-label="关闭搜索">${icon("close")}</button></div><div class="search-results"></div><div class="search-hint">搜索所连接设备的任务标题 · ↑ ↓ 选择 · Enter 打开 · Esc 关闭</div>`,
+    `<div class="search-box">${icon("search")}<input id="search-input" aria-label="搜索任务" placeholder="搜索任务" autocomplete="off"><button data-command="closeModal" aria-label="关闭搜索">${icon("close")}</button></div><div class="search-results"></div>`,
     "dialog search-dialog",
   );
   const render = () => {
@@ -292,18 +290,18 @@ export function settings(section = "通用") {
   };
   const card = (html) => `<div class="setting-card">${html}</div>`;
   const setting = (title, description, control = "") =>
-    `<div class="setting-row"><div><label>${title}</label><small>${description}</small></div>${control}</div>`;
+    `<div class="setting-row"><div><label>${title}</label>${description ? `<small>${description}</small>` : ""}</div>${control}</div>`;
   let html = "";
   if (section === "外观")
     html = card(
       setting(
         "主题",
-        "选择当前客户端的界面外观",
+        "",
         `<select id="theme-select" aria-label="主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>`,
       ) +
         setting(
           "字体大小",
-          "调整消息正文的显示大小",
+          "",
           `<input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 16}">`,
         ),
     );
@@ -313,9 +311,7 @@ export function settings(section = "通用") {
         "当前设备",
         esc(state.device?.displayName ?? "未连接"),
         '<button class="button" data-command="deviceSettings">选择设备</button>',
-      ) +
-        setting("执行位置", "任务和文件保留在远端 Mac；客户端通过账号通道连接。") +
-        setting("远程访问", "目标 Mac 需在 WorkBuddy 中开启“允许移动端连接此设备”。"),
+      ),
     );
   else if (section === "快捷键")
     html = card(
@@ -336,18 +332,16 @@ export function settings(section = "通用") {
         "会话模型",
         esc(state.config.model || "使用远端默认模型"),
         '<button class="button" data-command="settingsModels">选择模型</button>',
-      ) + setting("模型配置", "选择当前远端任务使用的模型。"),
+      ),
     );
   else if (section === "通用")
     html = card(
-      setting("WorkBuddy Remote", "独立账号登录 · 本地任务远程接入 · 0.2.2") +
+      setting("WorkBuddy Remote", "0.2.4") +
         setting(
           "连接状态",
           state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接",
           '<button class="button" data-command="deviceSettings">设备连接</button>',
-        ) +
-        setting("消息显示", "支持 Markdown、表格、代码、图片和工具折叠内容。") +
-        setting("刷新方式", "会话历史每 2 秒读取一次，任务列表每 30 秒刷新。"),
+        ),
     );
   $("#settings-content").innerHTML = html;
   if (reuse) enter($("#settings-content"), { distance: 4, duration: 180 });
@@ -426,7 +420,7 @@ export async function fileDetail(index) {
 }
 export async function automations() {
   const gen = modal(
-    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>定时任务</h2><div class="menu-note">远端 Mac 的定时任务 · 只读</div><div id="automation-list" class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取…</div>`,
+    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>定时任务</h2><div id="automation-list" class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取…</div>`,
     "dialog catalog-dialog",
   );
   try {

@@ -6,7 +6,15 @@
  */
 import { state, $, native, textOf, escapeHTML as esc } from "./state.js";
 import { paintIcons, icon } from "./icons.js";
-import { renderPage, renderSidebar, renderMessages, resetHistory, updateComposer, toast, banner } from "./view.js";
+import {
+  renderPage,
+  renderSidebar,
+  renderMessages,
+  resetHistory,
+  updateComposer,
+  toast,
+  banner,
+} from "./view.js";
 import * as panels from "./panels.js";
 import { toggleSidebar } from "./motion.js";
 import {
@@ -61,7 +69,9 @@ async function command(type, data = {}, anchor) {
     case "filter":
       panels.popover(
         anchor,
-        rowFilter("全部任务", "all") + rowFilter("置顶任务", "pinned") + rowFilter("进行中", "running"),
+        rowFilter("全部任务", "all") +
+          rowFilter("置顶任务", "pinned") +
+          rowFilter("进行中", "running"),
         200,
       );
       break;
@@ -112,7 +122,13 @@ async function command(type, data = {}, anchor) {
       panels.popover(
         anchor ?? $("#model-button"),
         panels.row("工作模式", "chooseMode", "code", "", 'data-value="craft"') +
-          panels.row("计划模式", "chooseMode", "file", "", 'data-value="plan"') +
+          panels.row(
+            "计划模式",
+            "chooseMode",
+            "file",
+            "",
+            'data-value="plan"',
+          ) +
           panels.row("问答模式", "chooseMode", "book", "", 'data-value="ask"'),
         220,
       );
@@ -162,35 +178,38 @@ async function command(type, data = {}, anchor) {
       );
       break;
     case "logout":
-      panels.confirmDialog("退出登录", "清除此 App 的登录状态。远端设备及任务保留。", () =>
-        safe(async () => {
-          ++state.epoch;
-          ++state.historyEpoch;
-          await native("logout");
-          Object.assign(state, {
-            connected: false,
-            device: null,
-            devices: [],
-            sessions: [],
-            models: [],
-            workspaces: [],
-            profile: {},
-            features: {},
-            catalogs: {},
-            draftConfig: {},
-            config: {},
-            records: [],
-            session: null,
-            sending: false,
-            connecting: false,
-            loading: false,
-            view: "home",
-          });
-          setDraft("");
-          resetHistory();
-          renderPage();
-          banner("请登录 WorkBuddy 账号");
-        }),
+      panels.confirmDialog(
+        "退出登录",
+        "清除此 App 的登录状态。远端设备及任务保留。",
+        () =>
+          safe(async () => {
+            ++state.epoch;
+            ++state.historyEpoch;
+            await native("logout");
+            Object.assign(state, {
+              connected: false,
+              device: null,
+              devices: [],
+              sessions: [],
+              models: [],
+              workspaces: [],
+              profile: {},
+              features: {},
+              catalogs: {},
+              draftConfig: {},
+              config: {},
+              records: [],
+              session: null,
+              sending: false,
+              connecting: false,
+              loading: false,
+              view: "home",
+            });
+            setDraft("");
+            resetHistory();
+            renderPage();
+            banner("请登录 WorkBuddy 账号");
+          }),
       );
       break;
     case "files":
@@ -211,7 +230,13 @@ async function command(type, data = {}, anchor) {
     case "copyConversation":
       await native("copy", {
         text: state.records
-          .map((r) => "你：\n" + textOf(r.userMessage) + "\n\nWorkBuddy：\n" + textOf(r.assistantMessage))
+          .map(
+            (r) =>
+              "你：\n" +
+              textOf(r.userMessage) +
+              "\n\nWorkBuddy：\n" +
+              textOf(r.assistantMessage),
+          )
           .join("\n\n"),
       });
       toast("已复制会话内容");
@@ -240,11 +265,14 @@ function rowFilter(label, value) {
   );
 }
 
-document.addEventListener("command", (e) => safe(() => command(e.detail.type, e.detail, e.detail.anchor)));
+document.addEventListener("command", (e) =>
+  safe(() => command(e.detail.type, e.detail, e.detail.anchor)),
+);
 document.addEventListener("click", (e) => {
   const target = e.target.closest("button,[data-session]");
   if (!target) {
-    if (!e.target.closest("#popover")) panels.closePopover({ restoreFocus: false });
+    if (!e.target.closest("#popover"))
+      panels.closePopover({ restoreFocus: false });
     return;
   }
   if (target.dataset.connect) {
@@ -261,31 +289,13 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (target.dataset.action || target.dataset.command) {
-    safe(() => command(target.dataset.action ?? target.dataset.command, target.dataset, target));
-    return;
-  }
-  if (target.dataset.prompt) {
-    setDraft(target.dataset.prompt);
-    $("#prompt").focus();
-    return;
-  }
-  if (target.dataset.quick) {
-    setDraft(
-      {
-        创作文档: "帮我创作一份文档：",
-        金融服务: "帮我分析金融数据：",
-        分析数据: "帮我分析以下数据：",
-        制作PPT: "帮我制作一份 PPT：",
-        深度研究: "请深入研究：",
-        策划方案: "帮我策划一个方案：",
-      }[target.dataset.quick] ?? target.dataset.quick + "：",
+    safe(() =>
+      command(
+        target.dataset.action ?? target.dataset.command,
+        target.dataset,
+        target,
+      ),
     );
-    $("#prompt").focus();
-    return;
-  }
-  if (target.dataset.scene) {
-    state.scene = target.dataset.scene;
-    renderPage();
     return;
   }
   if (target.dataset.catalogTab) {
@@ -297,7 +307,12 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (target.dataset.catalogItem !== undefined) {
-    safe(() => command("catalogItem", { index: target.dataset.catalogItem, catalogType: target.dataset.catalogType }));
+    safe(() =>
+      command("catalogItem", {
+        index: target.dataset.catalogItem,
+        catalogType: target.dataset.catalogType,
+      }),
+    );
     return;
   }
   if (target.dataset.file !== undefined) {
@@ -311,7 +326,10 @@ document.addEventListener("click", (e) => {
       `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>${esc(w.name ?? "工作空间")}</h2><p>${esc(w.path ?? w.cwd)}</p><div>${
         state.sessions
           .filter((s) => s.space?.cwd === (w.path ?? w.cwd))
-          .map((s) => `<button class="menu-row" data-session="${esc(s.id)}">${esc(s.title)}</button>`)
+          .map(
+            (s) =>
+              `<button class="menu-row" data-session="${esc(s.id)}">${esc(s.title)}</button>`,
+          )
           .join("") || '<div class="empty">此工作空间暂无任务</div>'
       }</div>`,
       "dialog catalog-dialog",
@@ -328,7 +346,11 @@ document.addEventListener("click", (e) => {
   }
   if (target.classList.contains("copy-code")) {
     safe(async () => {
-      await native("copy", { text: target.closest(".code-block").querySelector("code")?.textContent ?? "" });
+      await native("copy", {
+        text:
+          target.closest(".code-block").querySelector("code")?.textContent ??
+          "",
+      });
       toast("已复制代码");
     });
   }
@@ -360,18 +382,10 @@ $("#prompt").addEventListener("keydown", (e) => {
 });
 $("#messages-scroll").addEventListener("scroll", () => {
   const s = $("#messages-scroll");
-  $("#scroll-bottom").hidden = s.scrollHeight - s.clientHeight - s.scrollTop < 150;
+  $("#scroll-bottom").hidden =
+    s.scrollHeight - s.clientHeight - s.scrollTop < 150;
 });
 document.addEventListener("keydown", (e) => {
-  if (e.target.matches("[data-scene]") && ["ArrowLeft", "ArrowRight"].includes(e.key)) {
-    e.preventDefault();
-    const buttons = [...document.querySelectorAll("[data-scene]")];
-    const next = buttons[(buttons.indexOf(e.target) + (e.key === "ArrowRight" ? 1 : 2)) % buttons.length];
-    state.scene = next.dataset.scene;
-    renderPage();
-    next.focus();
-    return;
-  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
     panels.searchDialog();
@@ -389,7 +403,8 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     if (!$("#popover").hidden && !$("#popover").inert) panels.closePopover();
-    else if (!$("#modal-layer").hidden && !$("#modal-layer").inert) panels.closeModal();
+    else if (!$("#modal-layer").hidden && !$("#modal-layer").inert)
+      panels.closeModal();
     else if (state.panel) {
       safe(() => panels.files());
     }
@@ -397,11 +412,18 @@ document.addEventListener("keydown", (e) => {
   }
   const modal = $("#modal-layer"),
     pop = $("#popover");
-  const scope = !pop.hidden && !pop.inert ? pop : !modal.hidden && !modal.inert ? modal : null;
+  const scope =
+    !pop.hidden && !pop.inert
+      ? pop
+      : !modal.hidden && !modal.inert
+        ? modal
+        : null;
   if (scope && e.key === "Tab") {
-    const focusable = [...scope.querySelectorAll('button:not(:disabled),input,select,[tabindex="0"]')].filter(
-      (x) => !x.hidden,
-    );
+    const focusable = [
+      ...scope.querySelectorAll(
+        'button:not(:disabled),input,select,[tabindex="0"]',
+      ),
+    ].filter((x) => !x.hidden);
     if (!focusable.length) return;
     const i = focusable.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) {
@@ -413,11 +435,15 @@ document.addEventListener("keydown", (e) => {
     }
   }
   if (scope && ["ArrowDown", "ArrowUp"].includes(e.key)) {
-    const list = [...scope.querySelectorAll("button:not(:disabled),.task-row")].filter((x) => !x.hidden);
+    const list = [
+      ...scope.querySelectorAll("button:not(:disabled),.task-row"),
+    ].filter((x) => !x.hidden);
     if (!list.length) return;
     e.preventDefault();
     const i = list.indexOf(document.activeElement);
-    list[(i + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length].focus();
+    list[
+      (i + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length
+    ].focus();
   }
   if (e.key === "Enter" && document.activeElement?.matches(".task-row")) {
     e.preventDefault();
@@ -438,10 +464,10 @@ window.nativeEvent = ({ type, data }) => {
 document.body.classList.add("wb-polished");
 paintIcons();
 panels.applyAppearance();
-matchMedia("(prefers-color-scheme:dark)").addEventListener("change", panels.applyAppearance);
-document
-  .querySelectorAll("[data-scene]")
-  .forEach((b, i) => b.insertAdjacentHTML("afterbegin", icon(["owl", "code", "sun"][i])));
+matchMedia("(prefers-color-scheme:dark)").addEventListener(
+  "change",
+  panels.applyAppearance,
+);
 renderPage();
 safe(async () => {
   const prefs = await native("ready");

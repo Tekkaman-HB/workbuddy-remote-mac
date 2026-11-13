@@ -421,98 +421,18 @@ body.collapsed #expand {
   overflow-y: auto;
   flex: 1;
   text-align: center;
-  padding: 13px 32px 72px;
+  padding: clamp(64px, 14vh, 120px) 32px 72px;
 }
 #home h1 {
   margin: 0;
-  font-size: 30px;
-  line-height: 42px;
+  font-size: 26px;
+  line-height: 38px;
   font-weight: 600;
   letter-spacing: -0.5px;
-}
-.scene-switch {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  padding: 2px;
-  background: var(--gray-2);
-  margin-top: 14px;
-  height: 36px;
-}
-.scene-switch button {
-  padding: 0 11px;
-  font-size: 15px;
-  gap: 5px;
-  border-radius: 20px;
-  color: var(--muted);
-}
-.scene-switch button.active {
-  background: var(--surface);
-  box-shadow: 0 1px 4px #0000001a;
-  color: var(--text);
-  font-weight: 600;
-}
-.scene-switch .icon {
-  width: 17px;
-  height: 17px;
 }
 #home-content {
   width: 100%;
   max-width: 800px;
-  margin: 64px auto 0;
+  margin: 24px auto 0;
   text-align: left;
-}
-#quick-prompts {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding-right: 68px;
-}
-#quick-prompts button {
-  padding: 6px 12px;
-  font-size: 14px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--sidebar);
-  height: 32px;
-}
-#quick-prompts button:hover {
-  background: var(--selected);
-}
-#suggestions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 52px;
-}
-#suggestions button {
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  padding: 7px 16px;
-  font-size: 14px;
-  box-shadow: 0 2px 4px #00000004;
-  max-width: 100%;
-  white-space: normal;
-  text-align: left;
-  min-height: 38px;
-}
-#suggestions button span {
-  margin-left: 5px;
-  font-size: 18px;
-}
-#home:after {
-  content: "内容由 AI 生成，请核实重要信息";
-  position: fixed;
-  bottom: 14px;
-  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
-  transform: translateX(-50%);
-  color: #b2b2b2;
-  font-size: 11px;
-  white-space: nowrap;
-  pointer-events: none;
-}
-body.collapsed #home:after {
-  left: 50%;
 }

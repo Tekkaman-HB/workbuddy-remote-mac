@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- [INPUT]: 本地 styles.css 与打包 app.js。[OUTPUT]: 独立客户端页面骨架。[POS]: UI 入口。
+<!-- [INPUT]: 本地 styles.css 与打包 app.js。[OUTPUT]: 精简远程会话页面骨架。[POS]: UI 入口。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md -->
 <html lang="zh-CN">
   <head>
@@ -19,12 +19,29 @@
     <div id="app">
       <aside id="sidebar">
         <div class="sidebar-tools">
-          <span></span><button data-action="collapse" aria-label="收起侧栏" data-icon="panel"></button
-          ><button data-action="search" aria-label="搜索任务 ⌘K" data-icon="search"></button
-          ><button data-action="filter" aria-label="筛选任务" data-icon="filter"></button>
+          <span></span
+          ><button
+            data-action="collapse"
+            aria-label="收起侧栏"
+            data-icon="panel"
+          ></button
+          ><button
+            data-action="search"
+            aria-label="搜索任务 ⌘K"
+            data-icon="search"
+          ></button
+          ><button
+            data-action="filter"
+            aria-label="筛选任务"
+            data-icon="filter"
+          ></button>
         </div>
         <div class="brand">
-          <img class="wb-brand-mark" src="assets/brand-mark.svg" alt="WorkBuddy Remote" />
+          <img
+            class="wb-brand-mark"
+            src="assets/brand-mark.svg"
+            alt="WorkBuddy Remote"
+          />
           <div><b>WorkBuddy</b><small>REMOTE · MAC</small></div>
         </div>
         <nav id="navigation"></nav>
@@ -34,34 +51,49 @@
         </div>
         <footer id="account">
           <button class="account-main" data-action="account">
-            <span class="avatar">W</span><span id="profile-name">WorkBuddy 用户</span></button
-          ><button id="device-button" data-action="devices" aria-label="设备连接" data-icon="device">
+            <span class="avatar">W</span
+            ><span id="profile-name">WorkBuddy 用户</span></button
+          ><button
+            id="device-button"
+            data-action="devices"
+            aria-label="设备连接"
+            data-icon="device"
+          >
             <i class="connection-dot"></i>
           </button>
         </footer>
       </aside>
       <main id="main">
         <header id="titlebar">
-          <button id="expand" data-action="collapse" aria-label="展开侧栏" data-icon="panel"></button
+          <button
+            id="expand"
+            data-action="collapse"
+            aria-label="展开侧栏"
+            data-icon="panel"
+          ></button
           ><span id="conversation-title"></span>
           <div class="title-actions">
-            <button data-action="search" aria-label="搜索任务" data-icon="search"></button
-            ><button data-action="copyConversation" aria-label="复制会话内容" data-icon="copy"></button
-            ><button data-action="files" aria-label="展开文件面板" data-icon="rightPanel"></button>
+            <button
+              data-action="search"
+              aria-label="搜索任务"
+              data-icon="search"
+            ></button
+            ><button
+              data-action="copyConversation"
+              aria-label="复制会话内容"
+              data-icon="copy"
+            ></button
+            ><button
+              data-action="files"
+              aria-label="展开文件面板"
+              data-icon="rightPanel"
+            ></button>
           </div>
         </header>
         <section id="home">
-          <h1>WorkBuddy, 我帮你</h1>
-          <div class="scene-switch" role="radiogroup" aria-label="任务场景">
-            <button class="active" role="radio" aria-checked="true" data-scene="办公">办公</button
-            ><button role="radio" aria-checked="false" data-scene="开发">开发</button
-            ><button role="radio" aria-checked="false" data-scene="设计">设计</button
-            ><span class="wb-scene-indicator" aria-hidden="true"></span>
-          </div>
+          <h1>远端 WorkBuddy</h1>
           <div id="home-content">
-            <div id="quick-prompts"></div>
             <div id="home-composer-slot"></div>
-            <div id="suggestions"></div>
           </div>
         </section>
         <section id="chat" hidden>
@@ -74,7 +106,6 @@
             hidden
           ></button>
           <div id="chat-composer-slot"></div>
-          <div class="disclaimer">内容由 AI 生成，请核实重要信息</div>
         </section>
         <div id="connection-banner" hidden></div>
       </main>
@@ -83,7 +114,6 @@
     <div id="composer-wrap">
       <div class="composer-tray">
         <div class="composer">
-          <img class="mascot" src="assets/mascot.png" alt="" />
           <div id="composer-tags"></div>
           <textarea
             id="prompt"
@@ -92,12 +122,28 @@
             rows="2"
           ></textarea>
           <div class="composer-toolbar">
-            <button data-action="plus" aria-label="模式、专家和远端目录" data-icon="plus"></button
+            <button
+              data-action="plus"
+              aria-label="模式、专家和远端目录"
+              data-icon="plus"
+            ></button
             ><button class="permission" data-action="permission"></button>
             <div class="toolbar-spacer"></div>
-            <button id="model-button" data-action="models">选择模型 <span>⌄</span></button
-            ><button id="send-button" data-action="send" aria-label="发送消息" data-icon="up" disabled></button
-            ><button id="stop-button" data-action="stop" aria-label="停止生成" data-icon="stop" hidden></button>
+            <button id="model-button" data-action="models">选择模型</button
+            ><button
+              id="send-button"
+              data-action="send"
+              aria-label="发送消息"
+              data-icon="up"
+              disabled
+            ></button
+            ><button
+              id="stop-button"
+              data-action="stop"
+              aria-label="停止生成"
+              data-icon="stop"
+              hidden
+            ></button>
           </div>
         </div>
         <div class="workspace-tray">

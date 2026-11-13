@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 现有主题令牌、motion.js 与 ui-craft / motion-match 的动效合同。
- * [OUTPUT]: 统一微交互、侧栏滑动、焦点、场景指示器和精细视觉状态。
+ * [OUTPUT]: 统一微交互、侧栏滑动、焦点、统一下拉箭头和精细视觉状态。
  * [POS]: UI 的最后一层视觉精修；不引入业务功能或动画依赖。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -173,64 +173,6 @@ body.wb-polished.collapsed #sidebar {
     opacity 180ms ease,
     visibility 0ms 260ms;
 }
-body.wb-polished .scene-switch {
-  position: relative;
-  display: inline-grid;
-  grid-template-columns: repeat(3, 1fr);
-  width: 234px;
-  isolation: isolate;
-}
-body.wb-polished .scene-switch button {
-  z-index: 1;
-  position: relative;
-  min-width: 0;
-  font-size: 14px;
-  gap: 6px;
-}
-body.wb-polished .scene-switch button.active {
-  background: transparent;
-  box-shadow: none;
-}
-.wb-scene-indicator {
-  position: absolute;
-  inset: 2px auto 2px 2px;
-  width: calc((100% - 4px) / 3);
-  border-radius: 20px;
-  background: var(--surface);
-  box-shadow:
-    0 1px 4px #00000010,
-    inset 0 0 0 1px #00000003;
-  transform: translateX(calc(var(--scene-index, 0) * 100%));
-  transition: transform 300ms var(--wb-ease);
-  pointer-events: none;
-  z-index: 0;
-}
-body.wb-polished #quick-prompts button {
-  font-size: 13px;
-  padding: 6px 12px;
-  background: var(--surface);
-}
-body.wb-polished #quick-prompts button:hover {
-  background: var(--hover);
-  border-color: #cfd4d2;
-}
-body.wb-polished #suggestions button {
-  font-size: 13px;
-  min-height: 37px;
-  gap: 12px;
-  box-shadow: 0 2px 4px #00000003;
-}
-body.wb-polished #suggestions button span {
-  font-size: 16px;
-  color: var(--muted);
-  transition:
-    transform 180ms var(--wb-ease),
-    color var(--wb-fast);
-}
-body.wb-polished #suggestions button:hover span {
-  transform: translate(2px, -2px);
-  color: var(--text);
-}
 body.wb-polished .composer {
   border-color: var(--border);
   box-shadow: 0 4px 18px #00000004;
@@ -279,6 +221,31 @@ body.wb-polished #chat .permission {
   min-width: 0;
   max-width: 120px;
   overflow: hidden;
+}
+/* -- 文字与箭头分离排布，所有下拉控件保持同一中心线 -- */
+body.wb-polished :is(#model-button, #workspace-button, .permission) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 20px;
+}
+.control-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.wb-polished .icon.dropdown-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: currentColor;
+  opacity: 0.6;
+  stroke-width: 1.8;
+  transition: transform 160ms var(--wb-ease);
+}
+body.wb-polished [aria-expanded="true"] > .dropdown-chevron {
+  transform: rotate(180deg);
 }
 body.wb-polished #popover {
   border-color: #0000000c;

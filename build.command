@@ -10,7 +10,7 @@ mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" work/swift-modu
 npm run build:ui
 mkdir -p "$app_dir/Contents/Resources/UI/assets"
 cp work/ui-build/app.js ui/index.html ui/*.css "$app_dir/Contents/Resources/UI/"
-cp ui/assets/mascot.png "$app_dir/Contents/Resources/UI/assets/mascot.png"
+rm -f "$app_dir/Contents/Resources/UI/assets/mascot.png"
 cp ui/assets/WorkBuddyRemote.icns "$app_dir/Contents/Resources/WorkBuddyRemote.icns"
 cp ui/assets/brand-mark.svg "$app_dir/Contents/Resources/UI/assets/brand-mark.svg"
 rm -f "$app_dir/Contents/Resources/icon.icns"
@@ -27,8 +27,8 @@ cat > "$app_dir/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>WorkBuddyRemote</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>WorkBuddyRemote.icns</string>
-<key>CFBundleVersion</key><string>20261113.4</string>
-<key>CFBundleShortVersionString</key><string>0.2.2</string>
+<key>CFBundleVersion</key><string>20261113.6</string>
+<key>CFBundleShortVersionString</key><string>0.2.4</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
