@@ -1,10 +1,10 @@
 /**
- * [INPUT]: 依赖原生请求桥、共享状态和视图更新函数。
- * [OUTPUT]: 设备连接、分页读取、草稿、任务写入和轮询协调。
+ * [INPUT]: 依赖原生请求桥、共享状态、catalog 模型合并和视图更新函数。
+ * [OUTPUT]: 设备连接、身份聚合任务、分页执行记录与有归属的产物预览、模型/草稿及任务协调。
  * [POS]: UI 的远端会话控制器；发送失败保留草稿且不自动重发。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, rpc, listItems, isListResult, mergeRecords } from "./state.js";
+import { state, $, native, rpc, listItems, isListResult, mergeRecords, projectedSessions } from "./state.js";
 import {
   renderPage,
   renderSidebar,
@@ -16,7 +16,12 @@ import {
   banner,
 } from "./view.js";
 import * as panels from "./panels.js";
+import { mergeModels } from "./catalog.js";
+import { runConversation } from "./automations.js";
+import { matchArtifacts } from "./artifacts.js";
 const drafts = new Map();
+const automationDetails = new Map();
+let lastAutomationRefresh = 0;
 let historyBusy = false,
   discoveryBusy = false,
   listEpoch = null,
@@ -68,6 +73,8 @@ export async function connect(id) {
   historyBusy = false;
   state.connected = false;
   state.session = null;
+  state.automation = null;
+  automationDetails.clear();
   state.records = [];
   state.sessions = [];
   state.workspaces = [];
@@ -90,6 +97,7 @@ export async function connect(id) {
     await loadSessions(epoch);
     const probes = [
       ["models", "wb:models:list", []],
+      ["customModels", "wb:models:customs", []],
       ["workspaces", "wb:workspaces:list", [{}]],
       ["experts", "wb:experts:list", []],
       ["skills", "wb:skills:installed", [{}]],
@@ -104,7 +112,8 @@ export async function connect(id) {
       state.features[key] = result.status === "fulfilled" && isListResult(result.value);
       if (state.features[key]) state.catalogs[key] = listItems(result.value);
     });
-    state.models = state.catalogs.models ?? [];
+    state.models = mergeModels(state.catalogs.models ?? [], state.catalogs.customModels ?? []);
+    state.features.models = state.features.models || state.features.customModels;
     state.workspaces = state.catalogs.workspaces ?? [];
     banner("");
   } catch (e) {
@@ -141,7 +150,10 @@ export async function loadSessions(epoch = state.epoch) {
       if (!items.length || !fresh || sessions.length >= (result?.total ?? Infinity) || items.length < 100) break;
     }
     if (epoch !== state.epoch) return;
+    const definitions = state.features.automations ? listItems(await rpc("wb:automations:list", {})) : null;
+    if (epoch !== state.epoch) return;
     state.sessions = sessions;
+    if (definitions) state.catalogs.automations = definitions;
     lastListRefresh = Date.now();
     if (state.session) {
       const current = sessions.find((x) => x.id === state.session.id);
@@ -168,9 +180,11 @@ export function resizeInput() {
   input.style.height = Math.min(220, Math.max(state.view === "home" ? 78 : 64, input.scrollHeight)) + "px";
 }
 export function newTask() {
+  void native("artifactClose").catch(() => {});
   saveDraft();
   state.historyEpoch++;
   state.session = null;
+  state.automation = null;
   state.records = [];
   state.hasOlder = false;
   state.view = "home";
@@ -186,6 +200,9 @@ export function newTask() {
   }
 }
 export async function openSession(id) {
+  const task = projectedSessions().find(x => x.id === id);
+  if (task?.isAutomationAggregate) return openAutomation(task);
+  void native("artifactClose").catch(() => {});
   const item = state.sessions.find((s) => s.id === id);
   if (!item || !state.connected) return;
   saveDraft();
@@ -194,6 +211,7 @@ export async function openSession(id) {
   const epoch = state.epoch,
     historyEpoch = ++state.historyEpoch;
   state.session = item;
+  state.automation = null;
   state.records = [];
   state.config = {};
   state.hasOlder = false;
@@ -225,6 +243,7 @@ export async function openSession(id) {
   }
 }
 export async function loadHistory(older = false, force = false, expected = state.historyEpoch) {
+  if (state.automation) return loadAutomationHistory(older, force);
   const id = state.session?.id,
     epoch = state.epoch;
   if (!id || (!force && historyBusy) || !state.connected) return;
@@ -274,6 +293,7 @@ export async function config(key, value) {
   panels.closePopover();
 }
 export async function send() {
+  if (state.automation) return;
   const text = $("#prompt").value.trim();
   if (!text || state.sending || state.loading || !requireConnection()) return;
   const epoch = state.epoch,
@@ -391,6 +411,85 @@ export async function taskAction(type, id) {
 
 export async function poll() {
   if (!state.connected || state.connecting || state.loading || state.sending) return;
-  if (state.session) await loadHistory();
+  if (state.session || state.automation) await loadHistory();
   if (Date.now() - lastListRefresh > 30000) await loadSessions();
+}
+
+async function openAutomation(task) {
+  if (!requireConnection()) return;
+  void native("artifactClose").catch(() => {});
+  saveDraft();
+  panels.closeModal(); panels.closePopover();
+  state.historyEpoch++;
+  state.session = null;
+  state.automation = task;
+  state.automationExpanded.clear();
+  state.records = [];
+  state.view = "automation";
+  state.loading = true;
+  state.hasOlder = false;
+  resetHistory(); renderPage(); renderMessages();
+  try { await loadAutomationHistory(false, true); }
+  catch (error) { toast(error.message); }
+  finally { if (state.automation?.id === task.id) { state.loading = false; renderMessages(true); } }
+}
+
+async function loadAutomationHistory(older = false, force = false) {
+  const task = state.automation, epoch = state.epoch, historyEpoch = state.historyEpoch;
+  if (!task || historyBusy && !force || !force && !older && Date.now() - lastAutomationRefresh < 10000) return;
+  historyBusy = true;
+  state.loadingOlder = older;
+  try {
+    const count = older ? state.records.length + 10 : Math.max(10, state.records.length);
+    const page = await rpc("wb:automations:listRecords", {automationId: task.automationId, offset: 0, limit: count, withTotal: true});
+    if (epoch !== state.epoch || historyEpoch !== state.historyEpoch) return;
+    const records = listItems(page);
+    const results = await Promise.all(records.map(async record => {
+      const key = JSON.stringify([epoch, record.id, record.status, record.finishedAt, record.summary, record.resultTitle]);
+      if (["success", "failed", "archived"].includes(record.status) && automationDetails.has(key)) return automationDetails.get(key);
+      try {
+        const detail = await rpc("wb:automations:getRecordDetail", record.id);
+        if (!detail || detail.id !== record.id || detail.automationId !== task.automationId) throw new Error("执行记录归属不匹配");
+        const merged = {...record, ...detail};
+        automationDetails.set(key, merged);
+        return merged;
+      } catch (error) { return {...record, detailError: error.message}; }
+    }));
+    if (epoch !== state.epoch || historyEpoch !== state.historyEpoch) return;
+    state.automation = projectedSessions().find(x => x.id === task.id) ?? task;
+    state.records = results.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
+    state.hasOlder = Number.isFinite(page.total) ? count < page.total : records.length === count;
+    state.loading = false;
+    lastAutomationRefresh = Date.now();
+    updateTitle(); renderMessages(force && !older);
+  } catch (error) { if (historyEpoch === state.historyEpoch) { if (force) throw error; banner("执行记录读取失败：" + error.message); } }
+  finally { if (historyEpoch === state.historyEpoch) { historyBusy = false; state.loadingOlder = false; } }
+}
+
+export function expandAutomationRecord(id) {
+  if (!state.automation || !state.records.some(x => x.id === id)) return;
+  if (state.automationExpanded.has(id)) state.automationExpanded.delete(id);
+  else state.automationExpanded.add(id);
+  const top = $("#messages-scroll").scrollTop;
+  renderMessages();
+  $("#messages-scroll").scrollTop = top;
+  [...document.querySelectorAll('[data-action="expandAutomationRecord"]')].find(button => button.dataset.record === id)?.focus({preventScroll: true});
+}
+export async function openAutomationConversation(id) {
+  const record = state.automation && state.records.find(x => x.id === id);
+  const conversation = record && runConversation(record);
+  if (!conversation) return;
+  if (!state.sessions.some(x => x.id === conversation)) { toast("此执行会话未出现在当前设备列表中"); return; }
+  await openSession(conversation);
+}
+export async function openAutomationArtifact(id, name) {
+  const record = state.automation && state.records.find(x => x.id === id);
+  const conversation = record && runConversation(record);
+  const epoch = state.historyEpoch;
+  if (!conversation) return;
+  const items = listItems(await rpc("wb:artifacts:list", {conversationId: conversation}));
+  if (epoch !== state.historyEpoch) return;
+  const matches = matchArtifacts(items, name);
+  if (matches.length !== 1) { toast(matches.length ? "存在同名文件，请打开执行会话后选择" : "此文件尚未出现在任务产物列表中"); return; }
+  await panels.openArtifact(matches[0], conversation);
 }

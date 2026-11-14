@@ -1,9 +1,11 @@
 /**
- * [INPUT]: 依赖 WebKit native 消息处理器。
- * [OUTPUT]: Promise 请求桥、共享页面状态和纯数据归一函数。
+ * [INPUT]: 依赖 WebKit native 消息处理器与 tasks 的纯任务投影。
+ * [OUTPUT]: Promise 桥、普通/自动化历史共享状态、身份聚合任务与数据归一函数。
  * [POS]: UI 的数据边界，不持有账号凭证。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
+import { projectTasks } from "./tasks.js";
+export { relativeDate } from "./tasks.js";
 export const state = {
   devices: [],
   profile: {},
@@ -15,6 +17,8 @@ export const state = {
   draftConfig: {},
   records: [],
   session: null,
+  automation: null,
+  automationExpanded: new Set(),
   connected: false,
   connecting: false,
   loading: false,
@@ -23,7 +27,6 @@ export const state = {
   workspace: null,
   draft: "",
   search: "",
-  showAll: false,
   filter: "all",
   view: "home",
   panel: false,
@@ -40,7 +43,7 @@ export function native(action, args = {}) {
       timeout = setTimeout(() => {
         pending.delete(id);
         reject(new Error("请求超时，请检查远端设备连接；消息不会自动重发。"));
-      }, 90000);
+      }, action === "artifactOpen" ? 300000 : 90000);
     pending.set(id, { resolve, reject, timeout });
     if (!window.webkit?.messageHandlers?.native) {
       clearTimeout(timeout);
@@ -123,8 +126,9 @@ export const isRunning = (value) =>
     "streaming",
   ].includes(String(value ?? "").toLowerCase());
 export function visibleSessions() {
-  return state.sessions.filter(
+  return projectedSessions().filter(
     (s) =>
+      s.inTaskList &&
       (state.filter !== "pinned" || s.isPinned) &&
       (state.filter !== "running" || isRunning(s.state)) &&
       (!state.search ||
@@ -133,16 +137,6 @@ export function visibleSessions() {
           .includes(state.search.toLowerCase())),
   );
 }
-export function relativeDate(value) {
-  const date = new Date(value < 1e12 ? value * 1000 : value);
-  const d = Math.max(0, Math.floor((Date.now() - date) / 86400000));
-  return !value
-    ? ""
-    : d === 0
-      ? "今天"
-      : d === 1
-        ? "昨天"
-        : d < 7
-          ? `${d}天前`
-          : `${date.getMonth() + 1}/${date.getDate()}`;
+export function projectedSessions() {
+  return projectTasks(state.sessions, state.features.automations ? state.catalogs.automations ?? [] : []);
 }

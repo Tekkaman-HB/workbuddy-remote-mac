@@ -1,13 +1,15 @@
 /**
- * [INPUT]: 依赖共享 state、受限 rpc、视图提示和图标。
- * [OUTPUT]: 精简说明的设备/模型/权限菜单、目录、账户、设置和文件面板。
+ * [INPUT]: 依赖共享 state、受限 rpc、catalog 名称/路径与模型归一、视图和图标。
+ * [OUTPUT]: 在线设备/模型/空间菜单、投影任务搜索、设置、原生主题同步、文件列表及指定执行会话的产物预览入口。
  * [POS]: UI 的次级交互，实际会话变更交给 app.js。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, rpc, listItems, escapeHTML as esc } from "./state.js";
+import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions } from "./state.js";
+import { matchArtifacts } from "./artifacts.js";
 import { icon } from "./icons.js";
-import { toast, taskRows } from "./view.js";
+import { toast, taskRows, updateComposer } from "./view.js";
 import { reveal, dismiss, enter, layoutChange } from "./motion.js";
+import { mergeModels, modelId, modelName, workspaceName, workspacePath, workspaceHint } from "./catalog.js";
 export const action = (type, data = {}) =>
   document.dispatchEvent(new CustomEvent("command", { detail: { type, ...data } }));
 let anchorElement = null,
@@ -44,7 +46,7 @@ export function popover(anchor, html, width = 240) {
   anchor.setAttribute("aria-controls", "popover");
   reveal(p);
   p.querySelectorAll('[data-danger="true"]').forEach((button) => button.classList.add("danger"));
-  p.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
+  p.querySelector("input,button:not(:disabled)")?.focus({ preventScroll: true });
 }
 export function row(label, type, i = "", extra = "", attrs = "") {
   return `<button class="menu-row" data-command="${type}" ${attrs}>${i ? icon(i) : ""}<span class="name">${esc(label)}</span>${extra}</button>`;
@@ -83,41 +85,74 @@ export function confirmDialog(title, description, onConfirm, { initial, destruct
   });
 }
 export function deviceMenu(anchor) {
+  const devices = state.devices.filter((device) => device.onlineFlag);
   const content =
     `<div class="menu-title">设备连接</div>` +
-    (state.devices.length
-      ? state.devices
+    (devices.length
+      ? devices
           .map(
             (d) =>
-              `<button class="device-card ${d.deviceId === state.device?.deviceId ? "selected" : ""}" data-connect="${esc(d.deviceId)}">${icon("device")}<span><strong>${esc(d.displayName ?? "未命名电脑")}</strong><small class="${d.onlineFlag ? "online" : ""}">${d.onlineFlag ? "在线" : "离线"}${d.deviceId === state.device?.deviceId && state.connected ? " · 已连接" : ""}${d.remoteViewFlag !== 1 ? " · 未启用远程连接" : ""}</small></span>${d.deviceId === state.device?.deviceId && state.connected ? icon("check", "check") : ""}</button>`,
+              `<button class="device-card ${d.deviceId === state.device?.deviceId ? "selected" : ""}" data-connect="${esc(d.deviceId)}">${icon("device")}<span><strong>${esc(d.displayName ?? "未命名电脑")}</strong><small class="online">在线${d.deviceId === state.device?.deviceId && state.connected ? " · 已连接" : ""}${d.remoteViewFlag !== 1 ? " · 未启用远程连接" : ""}</small></span>${d.deviceId === state.device?.deviceId && state.connected ? icon("check", "check") : ""}</button>`,
           )
           .join("")
-      : '<div class="empty">登录后读取你的 Mac 设备</div>') +
+      : `<div class="empty">${state.devices.length ? "暂无在线设备" : "登录后读取你的 Mac 设备"}</div>`) +
     '<div class="menu-separator"></div>' +
     row("刷新设备", "refreshDevices", "refresh") +
     row("使用 WorkBuddy 账号登录", "login", "device");
   popover(anchor, content, 330);
 }
 export function modelMenu(anchor) {
-  popover(
-    anchor,
-    `<div class="menu-title">选择模型</div>` +
-      (state.models.length
-        ? state.models
-            .map((m, i) => {
-              const id = m.id ?? m.model ?? m.key;
-              return row(
-                m.name ?? m.displayName ?? id,
-                "chooseModel",
-                "spark",
-                id === state.config.model ? icon("check", "check") : "",
-                `data-index="${i}"`,
-              );
-            })
-            .join("")
-        : '<div class="menu-note">模型列表尚未加载，请重新连接设备。</div>'),
-    340,
-  );
+  if (anchorElement === anchor && !$("#popover").hidden) {
+    closePopover();
+    return;
+  }
+  popover(anchor, '<div class="menu-title">选择模型</div><div id="model-options"></div>', 350);
+  const root = $("#model-options"),
+    epoch = state.epoch;
+  const render = () => {
+    const focusedId = root.contains(document.activeElement) ? document.activeElement.dataset.modelId : null;
+    const options = state.models.map((m, index) => ({ m, index }));
+    root.innerHTML =
+      [true, false]
+        .map((custom) => {
+          const group = options.filter(({ m }) => Boolean(m.custom) === custom);
+          if (!group.length) return "";
+          return (
+            `<div class="menu-title">${custom ? "自定义模型" : "内置模型"}</div>` +
+            group
+              .map(
+                ({ m, index }) =>
+                  `<button class="menu-row catalog-option" data-command="chooseModel" data-model-id="${esc(modelId(m))}" data-index="${index}" title="${esc(m.disabled ? m.disabledReason || "模型不可用" : modelId(m))}" ${m.disabled ? "disabled" : ""}>${icon(custom ? "plug" : "spark")}<span class="option-label"><strong>${esc(modelName(m))}</strong><small>${esc([typeof m.vendor === "string" && m.vendor.length > 1 ? m.vendor : "", modelId(m) !== modelName(m) ? modelId(m) : ""].filter(Boolean).join(" · "))}</small></span>${modelId(m) === state.config.model ? icon("check", "check") : ""}</button>`,
+              )
+              .join("")
+          );
+        })
+        .join("") || '<div class="empty">暂无可用模型</div>';
+    if (focusedId)
+      [...root.querySelectorAll("[data-model-id]")]
+        .find((b) => b.dataset.modelId === focusedId)
+        ?.focus({ preventScroll: true });
+  };
+  render();
+  root.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
+  const refresh = async () => {
+    root.setAttribute("aria-busy", "true");
+    const results = await Promise.allSettled([rpc("wb:models:list"), rpc("wb:models:customs")]);
+    if (epoch !== state.epoch || !root.isConnected) return;
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled" && isListResult(result.value))
+        state.catalogs[i ? "customModels" : "models"] = listItems(result.value);
+    });
+    state.models = mergeModels(state.catalogs.models ?? [], state.catalogs.customModels ?? []);
+    updateComposer();
+    root.setAttribute("aria-busy", "false");
+    render();
+    if (results.some((r) => r.status === "rejected" || !isListResult(r.value))) {
+      root.insertAdjacentHTML("afterbegin", '<button class="menu-row" data-model-retry>模型刷新失败，重试</button>');
+      root.querySelector("[data-model-retry]").onclick = refresh;
+    }
+  };
+  void refresh();
 }
 export function plusMenu(anchor) {
   popover(
@@ -149,23 +184,41 @@ export function permissionMenu(anchor) {
   );
 }
 export function workspaceMenu(anchor) {
+  if (anchorElement === anchor && !$("#popover").hidden) {
+    closePopover();
+    return;
+  }
   popover(
     anchor,
-    '<div class="menu-title">远端工作空间</div>' +
-      row("默认工作空间", "chooseWorkspace", "folder", "", 'data-index="-1"') +
-      state.workspaces
-        .map((w, i) =>
-          row(
-            w.name ?? w.path,
+    '<div class="menu-title">工作空间</div><input class="menu-search" aria-label="搜索工作空间" placeholder="搜索名称或路径" type="search"><div id="workspace-options"></div>',
+    350,
+  );
+  const input = $(".menu-search"),
+    root = $("#workspace-options");
+  const render = () => {
+    const query = input.value.trim().toLowerCase();
+    root.innerHTML =
+      (!query
+        ? row(
+            "默认工作空间",
             "chooseWorkspace",
             "folder",
-            state.workspace === w ? icon("check", "check") : "",
-            `data-index="${i}"`,
-          ),
+            !state.workspace ? icon("check", "check") : "",
+            'data-index="-1"',
+          )
+        : "") +
+      state.workspaces
+        .map((w, index) => ({ w, index }))
+        .filter(({ w }) => [workspaceName(w), workspacePath(w)].some((s) => s.toLowerCase().includes(query)))
+        .map(
+          ({ w, index }) =>
+            `<button class="menu-row catalog-option" data-command="chooseWorkspace" data-index="${index}" title="${esc(workspacePath(w))}">${icon("folder")}<span class="option-label"><strong>${esc(workspaceName(w))}</strong><small class="path-label">${esc(workspaceHint(w))}</small></span>${state.workspace === w ? icon("check", "check") : ""}</button>`,
         )
-        .join(""),
-    320,
-  );
+        .join("");
+    if (!root.innerHTML) root.innerHTML = '<div class="empty">没有匹配的工作空间</div>';
+  };
+  input.oninput = render;
+  render();
 }
 export function accountMenu(anchor) {
   const name = state.profile.nickname ?? state.profile.displayName ?? state.profile.name ?? "WorkBuddy 用户";
@@ -203,7 +256,7 @@ export function searchDialog() {
     const query = $("#search-input").value.toLowerCase();
     $(".search-results").innerHTML =
       taskRows(
-        state.sessions.filter((x) =>
+        projectedSessions().filter((x) =>
           String(x.title ?? "")
             .toLowerCase()
             .includes(query),
@@ -302,7 +355,7 @@ export function settings(section = "通用") {
         setting(
           "字体大小",
           "",
-          `<input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 16}">`,
+          `<input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 14}">`,
         ),
     );
   else if (section === "设备连接")
@@ -336,7 +389,7 @@ export function settings(section = "通用") {
     );
   else if (section === "通用")
     html = card(
-      setting("WorkBuddy Remote", "0.2.4") +
+      setting("WorkBuddy Remote", "0.3.2") +
         setting(
           "连接状态",
           state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接",
@@ -362,7 +415,11 @@ export function applyAppearance() {
   const theme = localStorage.getItem("theme") ?? "system";
   document.documentElement.dataset.theme =
     theme === "system" ? (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light") : theme;
-  document.documentElement.style.setProperty("--font-size", (localStorage.getItem("fontSize") ?? 16) + "px");
+  void native("appearance", { theme: document.documentElement.dataset.theme, preference: theme }).then(result => {
+    if ((localStorage.getItem("theme") ?? "system") === theme && ["light", "dark"].includes(result?.theme))
+      document.documentElement.dataset.theme = result.theme;
+  }).catch(() => {});
+  document.documentElement.style.setProperty("--font-size", (localStorage.getItem("fontSize") ?? 14) + "px");
 }
 export async function files() {
   state.panel = !state.panel;
@@ -396,28 +453,25 @@ export async function files() {
 export async function fileDetail(index) {
   const item = state.artifacts?.[index];
   if (!item) return;
-  const gen = modal(
-    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>${esc(item.title ?? item.name ?? "文件详情")}</h2><div class="file-detail">正在读取…</div>`,
-    "dialog catalog-dialog",
-  );
-  try {
-    const detail = await rpc("wb:artifacts:get", { artifactId: item.id ?? item.artifactId });
-    if (gen !== modalGeneration) return;
-    const text = detail?.content ?? detail?.text ?? detail?.description;
-    $(".file-detail").textContent =
-      typeof text === "string"
-        ? text
-        : [
-            detail?.title ?? detail?.name ?? item.title,
-            detail?.mimeType ?? detail?.contentType,
-            typeof detail?.size === "number" ? `${detail.size.toLocaleString()} 字节` : "",
-          ]
-            .filter(Boolean)
-            .join("\n");
-  } catch (e) {
-    if (gen === modalGeneration) $(".file-detail").textContent = e.message;
-  }
+  await openArtifact(item);
 }
+export async function openArtifact(item, session = state.session?.id) {
+  if (!session) return;
+  // -- 关闭列表后将阅读空间留给原生报告预览 --
+  if (state.panel) await files();
+  await native("artifactOpen", { conversationId: session, artifactId: item.id ?? item.artifactId });
+}
+export async function fileReference(name) {
+  const session = state.session?.id, epoch = state.epoch;
+  if (!session) return;
+  const items = listItems(await rpc("wb:artifacts:list", { conversationId: session }));
+  if (state.session?.id !== session || state.epoch !== epoch) return;
+  const matches = matchArtifacts(items, name);
+  if (matches.length === 1) return openArtifact(matches[0]);
+  if (!state.panel) await files();
+  toast(matches.length ? "存在同名文件，请从文件列表选择" : "此文件尚未出现在远端产物列表中");
+}
+
 export async function automations() {
   const gen = modal(
     `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>定时任务</h2><div id="automation-list" class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取…</div>`,

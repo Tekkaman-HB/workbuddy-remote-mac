@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- [INPUT]: 本地 styles.css 与打包 app.js。[OUTPUT]: 精简远程会话页面骨架。[POS]: UI 入口。
+<!-- [INPUT]: 本地 styles.css 与打包 app.js。[OUTPUT]: 含普通/自动化标题与计划标签的远程页面骨架。[POS]: UI 入口。
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md -->
 <html lang="zh-CN">
   <head>
@@ -71,7 +71,7 @@
             aria-label="展开侧栏"
             data-icon="panel"
           ></button
-          ><span id="conversation-title"></span>
+          ><span id="conversation-title"></span><span id="conversation-schedule"></span>
           <div class="title-actions">
             <button
               data-action="search"

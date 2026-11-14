@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node test、jsdom 和实际 motion.js。
- * [OUTPUT]: 验证动画中断、关闭期间不可交互和减少动态效果的行为。
+ * [OUTPUT]: 验证动画中断、关闭不可交互、减少动态效果及后台入场不冻结在透明帧。
  * [POS]: tests 的动效生命周期回归，不测试装饰样式。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,7 +10,7 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM("<body></body>");
 Object.assign(globalThis, { window: dom.window, document: dom.window.document });
 window.matchMedia = () => ({ matches: false });
-const { reveal, dismiss } = await import("../ui/motion.js");
+const { reveal, dismiss, enter } = await import("../ui/motion.js");
 function animatedElement() {
   const element = document.createElement("div");
   document.body.append(element);
@@ -67,4 +67,14 @@ test("减少动态效果时直接完成显示与关闭，不等待动画", async
   } finally {
     window.matchMedia = () => ({ matches: false });
   }
+});
+test("后台内容入场不创建可能被冻结的透明动画", async () => {
+  const {element, animations} = animatedElement();
+  const originalFocus = document.hasFocus;
+  document.hasFocus = () => false;
+  try {
+    const pending = enter(element);
+    assert.equal(animations.length, 0);
+    await pending;
+  } finally { document.hasFocus = originalFocus; }
 });

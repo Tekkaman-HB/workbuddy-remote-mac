@@ -5,6 +5,8 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 const paths = {
+  buddy: '<circle cx="12" cy="12" r="12" fill="#54546f" stroke="none"/><path d="M1 13 9 7l5-7 5 3-4 7 8 6-7 7-5-8-8 4Z" fill="#bfc0d3" stroke="none"/><g transform="rotate(-28 14 16)"><rect x="8" y="11" width="15" height="12" rx="5" fill="#242438" stroke="none"/><path d="M13 15v3m5-3v3" stroke="#f1f0fa" stroke-width="2.1"/></g>',
+  terminal: '<circle cx="12" cy="12" r="8.5"/><path d="m7.5 8.5 3.5 3.5-3.5 3.5m5 0h4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   new: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>',
   search: '<circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16 4.5 4.5"/>',

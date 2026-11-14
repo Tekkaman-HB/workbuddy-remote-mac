@@ -3,7 +3,7 @@ Swift + AppKit + WebKit + JavaScript + marked + DOMPurify + esbuild + Web Crypto
 
 <directory>
 lib/ - 通道凭证、SDK 装载和远程命令验证 (0 子目录)
-MacApp/ - AppKit 原生窗口、受限 UI 桥和 WebKit 自主登录 (0 子目录)
+MacApp/ - AppKit 原生窗口、受限 UI 桥、WebKit 自主登录和隔离产物预览 (0 子目录)
 ui/ - 对照本机 WorkBuddy 的内置界面，按接口能力裁剪入口并净化消息 (1 子目录: assets)
 tests/ - 协议边界、凭证保护、页面流程与动效生命周期测试 (0 子目录)
 tools/ - 独立应用图标的 AppKit 矢量源与生成工具 (0 子目录)
@@ -22,3 +22,4 @@ MacApp 通过自己的 WebKit 会话自主登录，内置 UI 不加载远程脚�
 wire.mjs 已通过真实只读列表请求；bootstrap 和 channel.mjs 仅用于实验取证。
 凭证和原始会话数据保存在指定工作目录，报告只输出统计。
 任何发消息测试仅针对本工具新建的隔离会话，默认仅验证读取。
+侧栏按远端身份与工作空间投影：自动化执行按 ID 聚合，归档/助理分流；定时历史只接入 listRecords/getRecordDetail，不显示远程绑定未提供的计划修改或立即运行入口。

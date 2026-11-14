@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 依赖 styles.css 的主题令牌与本地页面 DOM。
- * [OUTPUT]: 菜单、设置、文件面板与响应式样式。
+ * [OUTPUT]: 菜单、目录搜索与双行选项、设置、文件面板及响应式样式。
  * [POS]: UI 的局部视觉定义，由 index.html 顺序加载。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -479,4 +479,58 @@
     animation-duration: 0s !important;
     scroll-behavior: auto !important;
   }
+}
+/* -- 目录选择：主名称优先，技术标识作次级信息 -- */
+.menu-search {
+  display: block;
+  width: calc(100% - 12px);
+  margin: 4px 6px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.menu-search:focus {
+  border-color: #1ba88e70;
+  box-shadow: var(--wb-focus);
+}
+body.wb-polished .catalog-option {
+  min-height: 48px;
+}
+.catalog-option > .icon {
+  flex-shrink: 0;
+}
+.option-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+.option-label strong,
+.option-label small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 18px;
+}
+.option-label strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.option-label small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.option-label small:empty {
+  display: none;
+}
+.path-label {
+  direction: ltr;
+  text-align: left;
 }

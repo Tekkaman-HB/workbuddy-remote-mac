@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 现有主题令牌、motion.js 与 ui-craft / motion-match 的动效合同。
- * [OUTPUT]: 统一微交互、侧栏滑动、焦点、统一下拉箭头和精细视觉状态。
+ * [OUTPUT]: 统一微交互、侧栏滑动、焦点与任务右侧状态/悬停菜单、下拉箭头和视觉状态。
  * [POS]: UI 的最后一层视觉精修；不引入业务功能或动画依赖。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -80,6 +80,10 @@ body.wb-polished #titlebar .icon {
   width: 18px;
   height: 18px;
 }
+body.wb-polished #expand .icon {
+  width: 19px;
+  height: 19px;
+}
 body.wb-polished #account {
   padding: 0 18px;
   gap: 9px;
@@ -112,8 +116,8 @@ body.wb-polished .task-row .task-menu {
   position: absolute;
   right: 7px;
 }
-body.wb-polished .task-row:hover time,
-body.wb-polished .task-row:focus-within time {
+body.wb-polished .task-row:has(.task-menu):hover time,
+body.wb-polished .task-row:has(.task-menu):focus-within time {
   display: block;
   opacity: 0;
 }
@@ -376,13 +380,13 @@ body.wb-polished .catalog-card > .icon {
   color: var(--teal);
 }
 body.wb-polished .buddy-icon {
-  background: var(--sidebar);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
 }
 body.wb-polished .buddy-icon .icon {
-  width: 17px;
-  height: 17px;
+  width: 24px;
+  height: 24px;
 }
 body.wb-polished .message-actions button:hover {
   color: var(--text);
@@ -444,3 +448,6 @@ body.wb-polished .connection-dot {
     visibility: hidden;
   }
 }
+
+/* -- 未读与执行状态位于标题右侧，悬停时让位给任务菜单 -- */
+.task-row:has(.task-menu):is(:hover, :focus-within) > i { opacity: 0; }

@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 本机 WorkBuddy 5.9.3 的多状态观察及本地 UI DOM。
- * [OUTPUT]: 三层主题令牌、布局和交互状态样式。
+ * [OUTPUT]: 三层主题令牌、统一顶部工具栏、窗口控制区避让及交互布局。
  * [POS]: UI 统一视觉定义；深色令牌为同构推导，浅色为实际对照。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -22,8 +22,12 @@
   --border: var(--gray-4);
   --text: var(--ink);
   --sidebar-width: 280px;
+  --toolbar-height: 58px;
+  --toolbar-padding-top: 13px;
+  --toolbar-padding-bottom: 7px;
+  --window-controls-inset: 96px;
   --chat-width: 784px;
-  --font-size: 16px;
+  --font-size: 14px;
   --menu-shadow: 0 8px 32px #00000012, 0 2px 6px #00000008;
 }
 :root[data-theme="dark"] {
@@ -155,11 +159,11 @@ button .icon {
   overflow: hidden;
 }
 .sidebar-tools {
-  height: 58px;
+  height: var(--toolbar-height);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 13px 16px 7px;
+  padding: var(--toolbar-padding-top) 16px var(--toolbar-padding-bottom);
   gap: 8px;
   flex: none;
 }
@@ -386,11 +390,11 @@ button .icon {
   background: var(--surface);
 }
 #titlebar {
-  height: 52px;
+  height: var(--toolbar-height);
   flex: none;
   display: flex;
   align-items: center;
-  padding: 0 24px;
+  padding: var(--toolbar-padding-top) 24px var(--toolbar-padding-bottom);
   gap: 14px;
   user-select: none;
 }
@@ -412,6 +416,10 @@ button .icon {
 }
 body.collapsed #sidebar {
   display: none;
+}
+/* -- 完整内容视图延伸至标题栏，展开按钮须避开原生窗口控制区 -- */
+body.collapsed #titlebar {
+  padding-left: var(--window-controls-inset);
 }
 body.collapsed #expand {
   display: inline-flex;

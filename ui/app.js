@@ -1,20 +1,13 @@
 /**
- * [INPUT]: 依赖原生桥、共享状态、主视图及次级面板。
- * [OUTPUT]: 页面初始化、菜单动作和鼠标/键盘交互。
+ * [INPUT]: 依赖原生桥、共享状态、transcript 正文分层、主视图及次级面板。
+ * [OUTPUT]: 页面初始化、顶部原生拖动、自动化展开/执行会话/文件路由、正文复制与菜单/键盘交互。
  * [POS]: UI 入口，将用户动作路由到 controller 和 panels。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, textOf, escapeHTML as esc } from "./state.js";
+import { state, $, native, textOf, escapeHTML as esc, projectedSessions } from "./state.js";
 import { paintIcons, icon } from "./icons.js";
-import {
-  renderPage,
-  renderSidebar,
-  renderMessages,
-  resetHistory,
-  updateComposer,
-  toast,
-  banner,
-} from "./view.js";
+import { renderPage, renderSidebar, renderMessages, resetHistory, updateComposer, toast, banner } from "./view.js";
+import { replyParts } from "./transcript.js";
 import * as panels from "./panels.js";
 import { toggleSidebar } from "./motion.js";
 import {
@@ -33,7 +26,17 @@ import {
   stop,
   taskAction,
   poll,
+  expandAutomationRecord,
+  openAutomationConversation,
+  openAutomationArtifact,
 } from "./controller.js";
+
+document.addEventListener("mousedown", (event) => {
+  if (event.button !== 0 || !event.target.closest("#titlebar,.sidebar-tools")) return;
+  if (event.target.closest('button,a,input,textarea,select,[role="button"]')) return;
+  event.preventDefault();
+  safe(() => native("dragWindow"));
+});
 
 function information(title, description) {
   panels.modal(
@@ -62,16 +65,14 @@ async function command(type, data = {}, anchor) {
     case "collapse":
       toggleSidebar();
       break;
-    case "showAll":
-      state.showAll = !state.showAll;
-      renderSidebar();
-      break;
+    case "expandAutomationRecord": await expandAutomationRecord(data.record); break;
+    case "openAutomationConversation": await openAutomationConversation(data.record); break;
+    case "automationFile": await openAutomationArtifact(data.record, data.filename); break;
+    case "refreshAutomation": await loadHistory(false, true); break;
     case "filter":
       panels.popover(
         anchor,
-        rowFilter("全部任务", "all") +
-          rowFilter("置顶任务", "pinned") +
-          rowFilter("进行中", "running"),
+        rowFilter("全部任务", "all") + rowFilter("置顶任务", "pinned") + rowFilter("进行中", "running"),
         200,
       );
       break;
@@ -122,13 +123,7 @@ async function command(type, data = {}, anchor) {
       panels.popover(
         anchor ?? $("#model-button"),
         panels.row("工作模式", "chooseMode", "code", "", 'data-value="craft"') +
-          panels.row(
-            "计划模式",
-            "chooseMode",
-            "file",
-            "",
-            'data-value="plan"',
-          ) +
+          panels.row("计划模式", "chooseMode", "file", "", 'data-value="plan"') +
           panels.row("问答模式", "chooseMode", "book", "", 'data-value="ask"'),
         220,
       );
@@ -174,42 +169,39 @@ async function command(type, data = {}, anchor) {
     case "about":
       information(
         "WorkBuddy Remote",
-        "0.2.2 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
+        "0.3.2 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
       );
       break;
     case "logout":
-      panels.confirmDialog(
-        "退出登录",
-        "清除此 App 的登录状态。远端设备及任务保留。",
-        () =>
-          safe(async () => {
-            ++state.epoch;
-            ++state.historyEpoch;
-            await native("logout");
-            Object.assign(state, {
-              connected: false,
-              device: null,
-              devices: [],
-              sessions: [],
-              models: [],
-              workspaces: [],
-              profile: {},
-              features: {},
-              catalogs: {},
-              draftConfig: {},
-              config: {},
-              records: [],
-              session: null,
-              sending: false,
-              connecting: false,
-              loading: false,
-              view: "home",
-            });
-            setDraft("");
-            resetHistory();
-            renderPage();
-            banner("请登录 WorkBuddy 账号");
-          }),
+      panels.confirmDialog("退出登录", "清除此 App 的登录状态。远端设备及任务保留。", () =>
+        safe(async () => {
+          ++state.epoch;
+          ++state.historyEpoch;
+          await native("logout");
+          Object.assign(state, {
+            connected: false,
+            device: null,
+            devices: [],
+            sessions: [],
+            models: [],
+            workspaces: [],
+            profile: {},
+            features: {},
+            catalogs: {},
+            draftConfig: {},
+            config: {},
+            records: [],
+            session: null,
+            sending: false,
+            connecting: false,
+            loading: false,
+            view: "home",
+          });
+          setDraft("");
+          resetHistory();
+          renderPage();
+          banner("请登录 WorkBuddy 账号");
+        }),
       );
       break;
     case "files":
@@ -230,13 +222,7 @@ async function command(type, data = {}, anchor) {
     case "copyConversation":
       await native("copy", {
         text: state.records
-          .map(
-            (r) =>
-              "你：\n" +
-              textOf(r.userMessage) +
-              "\n\nWorkBuddy：\n" +
-              textOf(r.assistantMessage),
-          )
+          .map((r) => "你：\n" + textOf(r.userMessage) + "\n\nWorkBuddy：\n" + textOf(r.assistantMessage))
           .join("\n\n"),
       });
       toast("已复制会话内容");
@@ -265,14 +251,11 @@ function rowFilter(label, value) {
   );
 }
 
-document.addEventListener("command", (e) =>
-  safe(() => command(e.detail.type, e.detail, e.detail.anchor)),
-);
+document.addEventListener("command", (e) => safe(() => command(e.detail.type, e.detail, e.detail.anchor)));
 document.addEventListener("click", (e) => {
   const target = e.target.closest("button,[data-session]");
   if (!target) {
-    if (!e.target.closest("#popover"))
-      panels.closePopover({ restoreFocus: false });
+    if (!e.target.closest("#popover")) panels.closePopover({ restoreFocus: false });
     return;
   }
   if (target.dataset.connect) {
@@ -289,13 +272,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   if (target.dataset.action || target.dataset.command) {
-    safe(() =>
-      command(
-        target.dataset.action ?? target.dataset.command,
-        target.dataset,
-        target,
-      ),
-    );
+    safe(() => command(target.dataset.action ?? target.dataset.command, target.dataset, target));
     return;
   }
   if (target.dataset.catalogTab) {
@@ -315,6 +292,11 @@ document.addEventListener("click", (e) => {
     );
     return;
   }
+  if (target.dataset.artifactName) {
+    const run = state.automation && target.closest("[data-automation-record]");
+    safe(() => run ? openAutomationArtifact(run.dataset.automationRecord, target.dataset.artifactName) : panels.fileReference(target.dataset.artifactName));
+    return;
+  }
   if (target.dataset.file !== undefined) {
     safe(() => panels.fileDetail(Number(target.dataset.file)));
     return;
@@ -324,12 +306,9 @@ document.addEventListener("click", (e) => {
     state.search = "";
     panels.modal(
       `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>${esc(w.name ?? "工作空间")}</h2><p>${esc(w.path ?? w.cwd)}</p><div>${
-        state.sessions
+        projectedSessions()
           .filter((s) => s.space?.cwd === (w.path ?? w.cwd))
-          .map(
-            (s) =>
-              `<button class="menu-row" data-session="${esc(s.id)}">${esc(s.title)}</button>`,
-          )
+          .map((s) => `<button class="menu-row" data-session="${esc(s.id)}">${esc(s.title)}</button>`)
           .join("") || '<div class="empty">此工作空间暂无任务</div>'
       }</div>`,
       "dialog catalog-dialog",
@@ -339,7 +318,7 @@ document.addEventListener("click", (e) => {
   if (target.dataset.copyRecord) {
     const r = state.records.find((x) => x.id === target.dataset.copyRecord);
     safe(async () => {
-      await native("copy", { text: textOf(r?.assistantMessage) });
+      await native("copy", { text: textOf(r ? replyParts(r).answer : []) });
       toast("已复制回复");
     });
     return;
@@ -347,9 +326,7 @@ document.addEventListener("click", (e) => {
   if (target.classList.contains("copy-code")) {
     safe(async () => {
       await native("copy", {
-        text:
-          target.closest(".code-block").querySelector("code")?.textContent ??
-          "",
+        text: target.closest(".code-block").querySelector("code")?.textContent ?? "",
       });
       toast("已复制代码");
     });
@@ -366,6 +343,7 @@ document.addEventListener("click", (e) => {
 document.addEventListener("contextmenu", (e) => {
   const task = e.target.closest("[data-session]");
   if (task) {
+    if (task.dataset.session.startsWith("automation:")) return;
     e.preventDefault();
     panels.taskMenu(task, task.dataset.session);
   }
@@ -382,8 +360,7 @@ $("#prompt").addEventListener("keydown", (e) => {
 });
 $("#messages-scroll").addEventListener("scroll", () => {
   const s = $("#messages-scroll");
-  $("#scroll-bottom").hidden =
-    s.scrollHeight - s.clientHeight - s.scrollTop < 150;
+  $("#scroll-bottom").hidden = s.scrollHeight - s.clientHeight - s.scrollTop < 150;
 });
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -403,8 +380,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     if (!$("#popover").hidden && !$("#popover").inert) panels.closePopover();
-    else if (!$("#modal-layer").hidden && !$("#modal-layer").inert)
-      panels.closeModal();
+    else if (!$("#modal-layer").hidden && !$("#modal-layer").inert) panels.closeModal();
     else if (state.panel) {
       safe(() => panels.files());
     }
@@ -412,18 +388,11 @@ document.addEventListener("keydown", (e) => {
   }
   const modal = $("#modal-layer"),
     pop = $("#popover");
-  const scope =
-    !pop.hidden && !pop.inert
-      ? pop
-      : !modal.hidden && !modal.inert
-        ? modal
-        : null;
+  const scope = !pop.hidden && !pop.inert ? pop : !modal.hidden && !modal.inert ? modal : null;
   if (scope && e.key === "Tab") {
-    const focusable = [
-      ...scope.querySelectorAll(
-        'button:not(:disabled),input,select,[tabindex="0"]',
-      ),
-    ].filter((x) => !x.hidden);
+    const focusable = [...scope.querySelectorAll('button:not(:disabled),input,select,[tabindex="0"]')].filter(
+      (x) => !x.hidden,
+    );
     if (!focusable.length) return;
     const i = focusable.indexOf(document.activeElement);
     if (e.shiftKey && i <= 0) {
@@ -435,22 +404,28 @@ document.addEventListener("keydown", (e) => {
     }
   }
   if (scope && ["ArrowDown", "ArrowUp"].includes(e.key)) {
-    const list = [
-      ...scope.querySelectorAll("button:not(:disabled),.task-row"),
-    ].filter((x) => !x.hidden);
+    const list = [...scope.querySelectorAll("button:not(:disabled),.task-row")].filter((x) => !x.hidden);
     if (!list.length) return;
     e.preventDefault();
     const i = list.indexOf(document.activeElement);
-    list[
-      (i + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length
-    ].focus();
+    list[(i + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length].focus();
   }
   if (e.key === "Enter" && document.activeElement?.matches(".task-row")) {
     e.preventDefault();
     safe(() => openSession(document.activeElement.dataset.session));
   }
 });
+let previewCollapsedSidebar = false;
 window.nativeEvent = ({ type, data }) => {
+  if (type === "artifactPreview") {
+    if (data.open && !document.body.classList.contains("collapsed")) {
+      previewCollapsedSidebar = true;
+      toggleSidebar();
+    } else if (!data.open && previewCollapsedSidebar) {
+      previewCollapsedSidebar = false;
+      if (document.body.classList.contains("collapsed")) toggleSidebar();
+    }
+  }
   if (type === "authReady" && !state.connected) safe(() => discover(true));
   if (type === "signedIn") {
     state.devices = data.items;
@@ -464,11 +439,13 @@ window.nativeEvent = ({ type, data }) => {
 document.body.classList.add("wb-polished");
 paintIcons();
 panels.applyAppearance();
-matchMedia("(prefers-color-scheme:dark)").addEventListener(
-  "change",
-  panels.applyAppearance,
-);
+matchMedia("(prefers-color-scheme:dark)").addEventListener("change", panels.applyAppearance);
 renderPage();
+if (typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(([entry]) => {
+    $("#chat").style.setProperty("--composer-height", entry.target.getBoundingClientRect().height + "px");
+  }).observe($("#chat-composer-slot"));
+}
 safe(async () => {
   const prefs = await native("ready");
   state.preferredDevice = prefs.preferredDevice ?? "";

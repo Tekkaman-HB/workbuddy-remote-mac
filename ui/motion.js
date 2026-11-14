@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖原生 Web Animations、matchMedia 与现有页面节点。
- * [OUTPUT]: 提供可中断的显示/隐藏、内容入场、侧栏切换、可见焦点恢复和布局位移动效。
+ * [OUTPUT]: 可中断显隐、前台内容入场、侧栏切换、焦点恢复和布局位移；后台直接展示，避免 WebKit 暂停在透明首帧。
  * [POS]: UI 唯一动效协调器，按 motion-match 的 Focus Field、Sliding Content Tabs、Toast Overshoot 适配。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -77,6 +77,7 @@ export function dismiss(element, { kind = "popover", immediate = false, onHidden
 }
 export function enter(element, { distance = 5, duration = 220 } = {}) {
   if (!element || element.hidden) return Promise.resolve();
+  if (document.visibilityState === "hidden" || !document.hasFocus()) duration = 0;
   return play(
     element,
     [

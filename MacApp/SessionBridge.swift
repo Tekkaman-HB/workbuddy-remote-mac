@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WebKit 的独立浏览器会话和 lib/wire.mjs。
- * [OUTPUT]: 提供登录、设备发现、本地会话通道连接和远程调用。
+ * [OUTPUT]: 提供登录、设备发现、只读自动化记录/详情、单飞连接检查与只读断线重试、受限远程调用与模型展示字段及原生确认后的产物定位。
  * [POS]: MacApp 的账号与协议边界，被原生入口和本地页面桥使用。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -114,32 +114,58 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         try await invoke("wb:conversations:" + method, args)
     }
 
-    func invoke(_ method: String, _ args: [Any]) async throws -> [String: Any] {
+    func invoke(_ method: String, _ args: [Any], allowArtifactTransfer: Bool = false) async throws -> [String: Any] {
         guard !targetID.isEmpty else {throw RemoteFailure.message("请先连接目标 Mac")}
         let requestedTarget = targetID
         let conversations = ["list", "get", "requests", "sendPrompt", "cancel",
             "create", "rename", "pin", "unpin", "archive", "delete", "configSetModel", "configSetMode", "configSetExpert",
             "configSetPermissionMode"]
-        let catalogs = ["wb:models:list", "wb:experts:list", "wb:skills:installed", "wb:connectors:list",
-            "wb:workspaces:list", "wb:artifacts:list", "wb:artifacts:get", "wb:automations:list"]
-        guard conversations.map({"wb:conversations:" + $0}).contains(method) || catalogs.contains(method) else {
+        let catalogs = ["wb:models:list", "wb:models:customs", "wb:experts:list", "wb:skills:installed", "wb:connectors:list",
+            "wb:workspaces:list", "wb:artifacts:list", "wb:artifacts:get", "wb:automations:list",
+            "wb:automations:listRecords", "wb:automations:getRecordDetail"]
+        guard conversations.map({"wb:conversations:" + $0}).contains(method) || catalogs.contains(method) || (method == "wb:artifacts:locate" && allowArtifactTransfer) else {
             throw RemoteFailure.message("此远程动作尚未接入")
         }
-        let open = (try? await run("return window.wbRemote?.socket?.readyState === WebSocket.OPEN;")) as? Bool ?? false
-        if !open || expiresAt.timeIntervalSinceNow < 60 {
-            if let renewal {try await renewal.value}
-            else {
-                guard let target = targetInfo else {throw RemoteFailure.message("请重新连接目标 Mac")}
-                let task = Task {try await self.connect(target)}
-                renewal = task
-                defer {renewal = nil}
-                try await task.value
-            }
-        }
+        try await ensureConnection()
         guard targetID == requestedTarget else {throw RemoteFailure.message("目标设备已切换，请在当前设备重新操作。")}
         let command: [String: Any] = ["type": method, "args": args]
-        let value = try await run("const reply=await window.wbRemote.request(command);if(!reply.success)throw new Error(reply.code ?? 'REMOTE_REJECTED');return {result:reply.result ?? null};", ["command": command]) as? [String: Any]
+        let send = { try await self.run("const reply=await window.wbRemote.request(command);if(!reply.success)throw new Error(reply.code ?? 'REMOTE_REJECTED');return {result:reply.result ?? null};", ["command": command]) as? [String: Any] }
+        let value: [String: Any]?
+        do { value = try await send() }
+        catch {
+            let readOnly = catalogs.contains(method) || ["list", "get", "requests"].contains(where: {method == "wb:conversations:" + $0})
+            guard readOnly, error.localizedDescription.contains("CHANNEL_CLOSED") else { throw error }
+            try await ensureConnection()
+            guard targetID == requestedTarget else { throw RemoteFailure.message("目标设备已切换") }
+            value = try await send()
+        }
+        if ["wb:models:list", "wb:models:customs"].contains(method), let result = value?["result"] {
+            let items = (result as? [String: Any])?["items"] as? [[String: Any]] ?? result as? [[String: Any]]
+            guard let items else { throw RemoteFailure.message("模型列表格式无法识别") }
+            // -- 只将名称、标识与状态交给界面；端点、密钥和自定义请求头留在通道侧 --
+            let fields = ["id", "name", "label", "displayName", "vendor", "version", "family", "model", "key",
+                "custom", "trustLevel", "tags", "disabled", "disabledReason"]
+            let models = items.map { item in Dictionary(uniqueKeysWithValues: fields.compactMap { key in
+                item[key].map { (key, $0) }
+            }) }
+            return ["result": ["items": models]]
+        }
         return value ?? [:]
+    }
+
+    private func ensureConnection() async throws {
+        if let renewal { try await renewal.value; return }
+        // 将异步状态检查也放入单飞任务，避免多个调用拿旧的 closed 结果重复重连。
+        let task = Task {
+            let open = (try? await self.run("return window.wbRemote?.socket?.readyState === WebSocket.OPEN;")) as? Bool ?? false
+            if !open || self.expiresAt.timeIntervalSinceNow < 60 {
+                guard let target = self.targetInfo else { throw RemoteFailure.message("请重新连接目标 Mac") }
+                try await self.connect(target)
+            }
+        }
+        renewal = task
+        defer { renewal = nil }
+        try await task.value
     }
 
     func disconnect() async {

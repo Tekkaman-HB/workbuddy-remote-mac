@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 依赖 styles.css 的主题令牌与本地页面 DOM。
- * [OUTPUT]: 输入区、聊天消息与富文本样式。
+ * [OUTPUT]: 输入区、正文/执行折叠、定时任务日期/结果卡片、文件入口与下一次运行状态。
  * [POS]: UI 的局部视觉定义，由 index.html 顺序加载。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -127,6 +127,7 @@
 }
 #chat .composer textarea {
   min-height: 64px;
+  font-size: 14px;
 }
 #composer-tags {
   display: flex;
@@ -166,22 +167,22 @@
   width: 100%;
   max-width: var(--chat-width);
   margin: 0 auto;
-  padding: 20px 8px 30px;
+  padding: 24px 12px 32px;
   font-size: var(--font-size);
-  line-height: 1.8;
+  line-height: 1.786;
 }
 .request {
-  margin-bottom: 32px;
+  margin-bottom: 44px;
 }
 .user-message {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 28px;
+  margin-bottom: 40px;
 }
 .user-bubble {
   background: var(--hover);
-  border-radius: 18px;
-  padding: 10px 16px;
+  border-radius: 18px 18px 0 18px;
+  padding: 10px 14px;
   max-width: 88%;
   overflow-wrap: anywhere;
   line-height: 1.65;
@@ -196,7 +197,7 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .buddy-icon {
   display: flex;
@@ -214,17 +215,20 @@
 .assistant-message {
   overflow-wrap: anywhere;
 }
+.assistant-message strong {
+  font-weight: 600;
+}
 .assistant-message p {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 .assistant-message h1 {
-  font-size: 26px;
+  font-size: 24px;
 }
 .assistant-message h2 {
-  font-size: 22px;
+  font-size: 20px;
 }
 .assistant-message h3 {
-  font-size: 18px;
+  font-size: 16px;
 }
 .assistant-message h1,
 .assistant-message h2,
@@ -240,7 +244,7 @@
 }
 .assistant-message li {
   padding-left: 3px;
-  margin: 5px 0;
+  margin: 4px 0;
 }
 .assistant-message li p {
   margin-bottom: 6px;
@@ -284,11 +288,11 @@
 }
 .assistant-message code {
   font:
-    13px/1.7 Menlo,
+    1em/1.5 Menlo,
     Monaco,
     monospace;
   background: var(--hover);
-  padding: 2px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
 }
 .code-block {
@@ -346,52 +350,118 @@
 .attachment small {
   font-size: 11px;
 }
-.tool-card,
-.thinking {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  margin: 10px 0;
-  font-size: 13px;
-  overflow: hidden;
+/* -- 执行状态为一级折叠，思考和工具为二级轻量行 -- */
+.execution-process,
+.execution-status {
+  color: var(--muted);
+  font-size: var(--font-size);
+  line-height: 24px;
+  margin: 0 0 16px;
 }
-.tool-card summary,
-.thinking summary {
-  display: flex;
+.execution-process > summary {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 5px;
   cursor: pointer;
   list-style: none;
-  background: var(--sidebar);
+  border-radius: 4px;
+}
+.execution-process > summary:hover,
+.tool-card > summary:hover,
+.thinking > summary:hover {
+  color: var(--text);
+}
+.execution-process > summary > .icon {
+  width: 12px;
+  height: 12px;
+  transition: transform 160ms var(--wb-ease);
+}
+.execution-process[open] > summary > .icon {
+  transform: rotate(90deg);
+}
+.process-content {
+  padding-top: 14px;
+  color: var(--text);
+}
+.tool-card,
+.thinking {
+  margin: 8px 0;
+  font-size: var(--font-size);
+  color: var(--muted);
+}
+.tool-card > summary,
+.thinking > summary {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 7px;
+  min-height: 28px;
+  padding: 3px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+  line-height: 22px;
 }
 summary::-webkit-details-marker {
   display: none;
 }
-.tool-card summary span {
-  flex: 1;
+.tool-card > summary > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.tool-card summary > .icon:last-child,
-.thinking summary > .icon:last-child {
-  margin-left: auto;
-  width: 13px;
-  height: 13px;
+.tool-card > summary > .icon,
+.thinking > summary > .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
-.tool-card[open] summary > .icon:last-child,
-.thinking[open] summary > .icon:last-child {
+.tool-card > summary > .icon:last-child,
+.thinking > summary > .icon:last-child {
+  width: 12px;
+  height: 12px;
+  margin-left: 1px;
+  transition: transform 160ms var(--wb-ease);
+}
+.tool-card[open] > summary > .icon:last-child,
+.thinking[open] > summary > .icon:last-child {
   transform: rotate(90deg);
 }
-.tool-card pre {
+.tool-content,
+.thought-content {
+  margin: 4px 0 12px 21px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.tool-content pre,
+.detail-content > pre {
+  margin: 6px 0;
   padding: 12px;
   max-height: 320px;
   overflow: auto;
   white-space: pre-wrap;
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
   font:
     12px/1.7 Menlo,
     monospace;
 }
-.thinking > div {
-  padding: 12px;
-  color: var(--muted);
+.tool-section > span {
+  font-size: 11px;
+}
+.tool-error {
+  color: var(--red);
+  font-size: 11px;
+}
+.answer-content > :last-child,
+.process-content > :last-child {
+  margin-bottom: 0;
+}
+summary:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
 }
 .message-actions {
   display: flex;
@@ -412,7 +482,7 @@ summary::-webkit-details-marker {
   height: 15px;
 }
 #chat-composer-slot {
-  padding: 0 32px;
+  padding: 0 32px 20px;
   flex: none;
 }
 .older {
@@ -433,7 +503,7 @@ summary::-webkit-details-marker {
 }
 #scroll-bottom {
   position: absolute;
-  bottom: 190px;
+  bottom: calc(var(--composer-height, 150px) + 14px);
   left: 50%;
   width: 32px;
   height: 32px;
@@ -456,3 +526,138 @@ summary::-webkit-details-marker {
   white-space: nowrap;
   z-index: 2;
 }
+
+/* -- 产物引用：沿用正文等宽文件名，增加直接预览反馈 -- */
+.artifact-reference {
+  display: inline; max-width: 100%; padding: 2px 5px; border: 0; border-radius: 4px;
+  background: var(--hover); color: inherit; font: inherit; font-family: ui-monospace, SFMono-Regular, monospace;
+  overflow-wrap: anywhere; text-align: left; cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.artifact-reference:hover { color: var(--teal); background: var(--selected); }
+.artifact-reference:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
+
+/* -- 定时任务：日期分组、执行结果卡片及真实产物入口 -- */
+#conversation-schedule {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 0;
+  white-space: nowrap;
+}
+#titlebar,
+.sidebar-tools {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.automation-view #chat-composer-slot,
+.automation-view #scroll-bottom {
+  display: none;
+}
+.automation-view #messages {
+  max-width: 808px;
+  padding: 24px 24px 30px;
+}
+.automation-run {
+  margin-bottom: 28px;
+}
+.run-date {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  margin: 0 0 12px 24px;
+}
+.automation-card {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 5px #00000003;
+}
+.run-output {
+  line-height: 1.8;
+  font-size: var(--font-size);
+  max-height: 180px;
+  overflow: hidden;
+
+}
+.automation-card.expanded .run-output {
+  max-height: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.run-output > :last-child {
+  margin-bottom: 0;
+}
+.run-files {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+.run-files:empty {
+  margin-top: 0;
+}
+.run-file {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--sidebar);
+  padding: 12px 14px;
+  gap: 12px;
+  justify-content: flex-start;
+  text-align: left;
+}
+.run-file > .icon {
+  width: 25px;
+  height: 28px;
+  color: #4da5b0;
+  flex: none;
+}
+.run-file span {
+  min-width: 0;
+}
+.run-file strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+.run-file small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.run-card-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.run-card-actions button {
+  font-size: 12px;
+  color: var(--muted);
+  gap: 5px;
+}
+.run-card-actions .icon {
+  width: 13px !important;
+  height: 13px !important;
+}
+.run-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.run-status.failed {
+  color: var(--red);
+}
+.next-run {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 32px 24px 0;
+}
+.automation-view #conversation-title {
+  flex: 0 1 auto;
+}
+
+.run-output.clipped { mask-image: linear-gradient(#000 80%, transparent); -webkit-mask-image: linear-gradient(#000 80%, transparent); }
