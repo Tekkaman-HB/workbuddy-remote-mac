@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 state 的运行状态识别和远端请求记录。
- * [OUTPUT]: 提供执行过程/最终正文分层、真实耗时、工具名称与摘要。
+ * [OUTPUT]: 提供执行过程/正文分层、真实耗时、工具动作/图标/状态与可用详情。
  * [POS]: UI 的转录语义层，被 render.js 消费；不修改远端消息。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -54,37 +54,49 @@ export function requestStatus(record) {
   return label + " " + duration;
 }
 const toolLabels = {
-  Bash: "运行命令",
-  Read: "读取文件",
-  Write: "写入文件",
-  Edit: "修改文件",
-  MultiEdit: "修改文件",
-  Grep: "搜索内容",
-  Glob: "查找文件",
-  TodoWrite: "整理计划",
-  Task: "执行子任务",
-  ToolSearch: "查找工具",
-  DeferExecuteTool: "执行任务",
+  bash: ["运行命令", "terminal"],
+  read: ["读取文件", "file"],
+  write: ["写入文件", "file"],
+  edit: ["修改文件", "edit"],
+  multiedit: ["修改文件", "edit"],
+  grep: ["搜索内容", "search"],
+  glob: ["查找文件", "search"],
+  todowrite: ["整理计划", "check"],
+  task: ["执行子任务", "wrench"],
+  toolsearch: ["搜索工具", "search"],
+  deferexecutetool: ["执行工具", "wrench"],
+  websearch: ["搜索网页", "search"],
+  webfetch: ["读取网页", "globe"],
+  list_installed_plugins: ["查看已添加连接器", "plug"],
+  reconnect_plugin: ["重新授权连接器", "plug"],
+  send_automation_result: ["发送执行结果", "up"],
 };
+const asText = value => typeof value === "string" ? value : "";
 export function toolPresentation(block) {
-  const name = block.toolName || block.name || block.function?.name || "工具执行";
-  const input = block.input ?? block.arguments;
+  const name = asText(block.toolName || block.name || block.function?.name || block._meta?.["codebuddy.ai/toolName"]) || "工具执行";
+  const input = block.input ?? block.arguments ?? block.rawInput;
   let args = input;
   if (typeof args === "string") {
     try {
       args = JSON.parse(args);
     } catch {}
   }
-  const path = args?.file_path ?? args?.path;
-  const base = toolLabels[name] || name;
+  const canonical = name.split("__").at(-1).toLowerCase();
+  const [base, icon] = Object.hasOwn(toolLabels, canonical) ? toolLabels[canonical] : [name, "wrench"];
+  const description = asText(block.summary) || (block.title !== name ? asText(block.title) : "") || asText(args?.description);
+  const fileTool = ["read", "write", "edit", "multiedit"].includes(canonical);
+  const path = fileTool && (asText(args?.file_path ?? args?.path) || (/^(\/|[A-Za-z]:[\\/])/.test(description) ? description : ""));
+  const context = path ? path.split(/[\\/]/).pop() : "";
+  const output = block.result ?? block.output ?? block.rawOutput ?? block.content;
+  const status = asText(block.status ?? block.state).toLowerCase();
   return {
     name,
-    label:
-      path && ["Read", "Write", "Edit", "MultiEdit"].includes(name)
-        ? `${base}：${String(path).split("/").pop()}`
-        : base,
-    description: block.summary || (block.title && block.title !== name ? block.title : "") || args?.description || "",
-    input,
-    output: block.result ?? block.output ?? block.content,
+    label: context ? `${base}：${context}` : base,
+    action: base, context, icon, description,
+    input: args, output,
+    hasDetail: Boolean(description || [args, output].some(value => value !== undefined && value !== null && value !== "")),
+    failed: ["failed", "error"].includes(status),
+    running: ["pending", "running", "in_progress", "working"].includes(status),
+    cancelled: ["cancelled", "canceled"].includes(status),
   };
 }

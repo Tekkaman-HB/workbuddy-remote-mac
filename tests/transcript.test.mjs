@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node test 与实际 transcript.js。
- * [OUTPUT]: 验证执行过程与正文分离、中断保留正文及真实耗时。
+ * [OUTPUT]: 验证过程/正文分层、真实耗时与工具动作/图标/摘要及缺少详情边界。
  * [POS]: tests 的转录语义回归，不访问用户会话。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -46,4 +46,16 @@ test("状态耗时只取实际时间戳，工具摘要使用记录已有字段",
   });
   assert.equal(tool.label, "读取文件：report.md");
   assert.equal(tool.description, "检查报告");
+});
+test("过程按工具类型展示动作与图标，使用可用摘要且不猜测被裁剪的调用", () => {
+  assert.equal(toolPresentation({toolName: 'ToolSearch'}).label, '搜索工具');
+  assert.equal(toolPresentation({toolName: 'ToolSearch'}).icon, 'search');
+  const wrapper = toolPresentation({toolName: 'DeferExecuteTool', status: 'completed'});
+  assert.equal(wrapper.label, '执行工具');
+  assert.equal(wrapper.icon, 'wrench');
+  assert.equal(wrapper.hasDetail, false);
+  assert.equal(toolPresentation({toolName: 'mcp__workbuddy__reconnect_plugin'}).label, '重新授权连接器');
+  assert.equal(toolPresentation({toolName: 'Read', summary: '/remote/notes/report.md'}).context, 'report.md');
+  assert.equal(toolPresentation({toolName: 'unknown-tool'}).label, 'unknown-tool');
+  assert.equal(toolPresentation({toolName: 'constructor'}).label, 'constructor');
 });

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 AppKit、WebKit、SessionBridge、ArtifactPreview、ArtifactDownload 和内置 UI 资源。
- * [OUTPUT]: 提供独立窗口、受限顶部拖动/双击缩放、官方登录、主题同步及受限原生消息桥。
+ * [OUTPUT]: 独立窗口、受限顶部拖动/双击缩放、官方登录、主题同步及点击附件后直接验证/获取/预览的原生桥。
  * [POS]: MacApp 的原生入口，界面由 ui/ 渲染，账号凭证仅留在 SessionBridge。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -218,15 +218,6 @@ final class RemoteDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHand
                 cachedArtifact = (cacheKey, data, mime)
                 preview.display(data, mime: mime); return true
             }
-            let alert = NSAlert()
-            alert.messageText = "获取“\(name)”？"
-            alert.informativeText = "WorkBuddy 的远程文件接口会将此文件上传到腾讯网盘并创建分享链接，用于传回本机预览。"
-            alert.addButton(withTitle: "获取并预览"); alert.addButton(withTitle: "取消")
-            let accepted = await withCheckedContinuation { continuation in
-                alert.beginSheetModal(for: window) { continuation.resume(returning: $0 == .alertFirstButtonReturn) }
-            }
-            guard revision == previewRevision, target == bridge.targetID else {return false}
-            guard accepted else {closePreview(); return false}
             let location = try await bridge.invoke("wb:artifacts:locate", [["artifactId": artifactID]], allowArtifactTransfer: true)["result"] as? [String: Any]
             guard revision == previewRevision, target == bridge.targetID else {return false}
             guard let url = location?["url"] as? String else {throw RemoteFailure.message("远端未返回可下载的文件地址")}

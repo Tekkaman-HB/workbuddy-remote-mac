@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖原生 Web Animations、matchMedia 与现有页面节点。
- * [OUTPUT]: 可中断显隐、前台内容入场、侧栏切换、焦点恢复和布局位移；后台直接展示，避免 WebKit 暂停在透明首帧。
+ * [OUTPUT]: 可中断显隐、前台内容入场/布局位移、侧栏切换及焦点恢复；后台取消旧布局动画并直接到位，避免 WebKit 暂停在中间帧。
  * [POS]: UI 唯一动效协调器，按 motion-match 的 Focus Field、Sliding Content Tabs、Toast Overshoot 适配。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -89,6 +89,11 @@ export function enter(element, { distance = 5, duration = 220 } = {}) {
 }
 export function layoutChange(change, selectors = ["#messages", "#composer-wrap"]) {
   const elements = selectors.map((s) => document.querySelector(s)).filter(Boolean);
+  if (document.visibilityState === "hidden" || !document.hasFocus()) {
+    elements.forEach(cancel);
+    change();
+    return;
+  }
   const rects = elements.map((el) => el.getBoundingClientRect());
   change();
   elements.forEach((el, i) => {

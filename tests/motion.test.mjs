@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node test、jsdom 和实际 motion.js。
- * [OUTPUT]: 验证动画中断、关闭不可交互、减少动态效果及后台入场不冻结在透明帧。
+ * [OUTPUT]: 验证动画中断、关闭不可交互、减少动态效果及后台入场/布局位移不冻结。
  * [POS]: tests 的动效生命周期回归，不测试装饰样式。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,7 +10,7 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM("<body></body>");
 Object.assign(globalThis, { window: dom.window, document: dom.window.document });
 window.matchMedia = () => ({ matches: false });
-const { reveal, dismiss, enter } = await import("../ui/motion.js");
+const { reveal, dismiss, enter, layoutChange } = await import("../ui/motion.js");
 function animatedElement() {
   const element = document.createElement("div");
   document.body.append(element);
@@ -77,4 +77,36 @@ test("后台内容入场不创建可能被冻结的透明动画", async () => {
     assert.equal(animations.length, 0);
     await pending;
   } finally { document.hasFocus = originalFocus; }
+});
+test("后台布局直接到位并取消旧动画，前台仍保留布局过渡", async () => {
+  const {element, animations} = animatedElement();
+  element.id = 'layout-target';
+  let left = 0;
+  element.getBoundingClientRect = () => ({left});
+  const originalFocus = document.hasFocus;
+  const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+  try {
+    document.hasFocus = () => true;
+    Object.defineProperty(document, 'visibilityState', {configurable:true, value:'visible'});
+    layoutChange(() => {left = 100;}, ['#layout-target']);
+    assert.equal(animations.length, 1);
+    let cancelled = false;
+    const cancel = animations[0].cancel;
+    animations[0].cancel = () => {cancelled = true; cancel();};
+    document.hasFocus = () => false;
+    layoutChange(() => {left = 0;}, ['#layout-target']);
+    assert.equal(left, 0);
+    assert.equal(cancelled, true);
+    assert.equal(animations.length, 1);
+    document.hasFocus = () => true;
+    Object.defineProperty(document, 'visibilityState', {configurable:true, value:'hidden'});
+    layoutChange(() => {left = 50;}, ['#layout-target']);
+    assert.equal(left, 50);
+    assert.equal(animations.length, 1);
+  } finally {
+    document.hasFocus = originalFocus;
+    if (visibility) Object.defineProperty(document, 'visibilityState', visibility);
+    else delete document.visibilityState;
+    element.remove();
+  }
 });

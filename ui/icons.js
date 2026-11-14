@@ -1,10 +1,19 @@
 /**
  * [INPUT]: 无外部依赖。
- * [OUTPUT]: 自绘 SVG 图标、统一下拉箭头与按钮图标填充。
+ * [OUTPUT]: 自绘设置/搜索/目录与工具过程 SVG 图标、统一下拉箭头和按钮图标填充。
  * [POS]: UI 的统一线性图标字典。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 const paths = {
+  wrench: '<path d="M14.5 3a6 6 0 0 0-7.7 7.7L2.5 15a3 3 0 0 0 4.2 4.2l4.3-4.3A6 6 0 0 0 18.7 7l-3.3 3.3-3.7-3.7Z"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6h14M5 18h14"/>',
+  searchEmpty: '<circle cx="10" cy="11" r="7"/><path d="m15 16 6 6M19 4a2 2 0 1 1 3 1.7c-1 .6-1 1-1 2M21 10v.1"/><g transform="rotate(-24 10 11)"><rect x="5" y="8" width="10" height="7" rx="3"/><path d="M8 10.5v2m4-2v2M9 6h2v2"/></g>',
+  skill: '<path d="m4 20 9-9 3 3-9 9ZM12 4l3-2 7 7-2 3M13 3l-4 7 5 1 1 5 6-5"/>',
+  link: '<path d="m10 8 3-3a5 5 0 0 1 7 7l-3 3m-3 1-3 3a5 5 0 0 1-7-7l3-3M8 16l8-8"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18h1a2.5 2.5 0 0 0 1.8-4.2 1.6 1.6 0 0 1 1.1-2.8h1.6A3.5 3.5 0 0 0 21 10.5 9 9 0 0 0 12 3Z"/><circle cx="7" cy="10" r=".7"/><circle cx="10" cy="6.5" r=".7"/><circle cx="15" cy="7" r=".7"/><circle cx="6.5" cy="14" r=".7"/>',
+  keyboard: '<rect x="3" y="5" width="18" height="14" rx="4"/><path d="M7 9h1m3 0h1m3 0h2M7 12h1m3 0h1m3 0h2M8 15h8"/>',
+  cube: '<path d="m12 2 9 5v10l-9 5-9-5V7Zm0 10v10M3 7l9 5 9-5M7 4.8l9 5v4"/>',
+  chat: '<path d="M21 11c0 5-4 8-9 8l-5 3v-4C4 17 3 14 3 11a9 9 0 0 1 18 0Z"/><path d="M8 11h8"/>',
   buddy: '<circle cx="12" cy="12" r="12" fill="#54546f" stroke="none"/><path d="M1 13 9 7l5-7 5 3-4 7 8 6-7 7-5-8-8 4Z" fill="#bfc0d3" stroke="none"/><g transform="rotate(-28 14 16)"><rect x="8" y="11" width="15" height="12" rx="5" fill="#242438" stroke="none"/><path d="M13 15v3m5-3v3" stroke="#f1f0fa" stroke-width="2.1"/></g>',
   terminal: '<circle cx="12" cy="12" r="8.5"/><path d="m7.5 8.5 3.5 3.5-3.5 3.5m5 0h4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

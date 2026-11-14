@@ -1,11 +1,16 @@
 /**
- * [INPUT]: 依赖远端模型目录、脱敏自定义模型元数据与工作空间对象。
- * [OUTPUT]: 提供模型合并、显示名称、工作空间名称、完整路径及精简路径。
+ * [INPUT]: 依赖远端模型/专家/技能目录、zh/en 多语言展示字段与工作空间对象。
+ * [OUTPUT]: 提供目录名称/说明归一、模型合并、工作空间名称、完整路径及精简路径。
  * [POS]: UI 目录的展示边界，被 controller、panels 和 view 共享。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 export const modelId = (model) => model.id ?? model.model ?? model.key;
 export const modelName = (model) => model.name || model.label || model.displayName || modelId(model);
+// -- 厂商目录的展示字段支持 {zh, en}；不将未知对象强转为可见文字 --
+export const catalogText = value => typeof value === "string" ? value
+  : typeof value?.zh === "string" ? value.zh : typeof value?.en === "string" ? value.en : "";
+export const catalogName = item => [item.displayName, item.name, item.title, item.id].map(catalogText).find(Boolean) || "未命名";
+export const catalogDescription = item => [item.displayDescription, item.description, item.summary, item.profession].map(catalogText).find(Boolean) || "";
 const isCustom = (m) =>
   m.custom === true ||
   m.trustLevel === "custom" ||

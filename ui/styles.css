@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 本机 WorkBuddy 5.9.3 的多状态观察及本地 UI DOM。
- * [OUTPUT]: 三层主题令牌、统一顶部工具栏、窗口控制区避让及交互布局。
+ * [OUTPUT]: 三层主题令牌、1440px 阅读上限与响应式边距、顶部工具栏及窗口控制区避让。
  * [POS]: UI 统一视觉定义；深色令牌为同构推导，浅色为实际对照。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -26,7 +26,8 @@
   --toolbar-padding-top: 13px;
   --toolbar-padding-bottom: 7px;
   --window-controls-inset: 96px;
-  --chat-width: 784px;
+  --chat-width: 1440px;
+  --chat-gutter: 32px;
   --font-size: 14px;
   --menu-shadow: 0 8px 32px #00000012, 0 2px 6px #00000008;
 }
@@ -443,4 +444,12 @@ body.collapsed #expand {
   max-width: 800px;
   margin: 24px auto 0;
   text-align: left;
+}
+
+/* -- 阅读区随实际可用宽度伸展，窄窗口收紧边距 -- */
+@media (max-width: 900px) {
+  :root { --chat-gutter: 16px; }
+}
+@media (max-width: 650px) {
+  :root { --chat-gutter: 12px; }
 }

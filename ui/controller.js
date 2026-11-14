@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖原生请求桥、共享状态、catalog 模型合并和视图更新函数。
- * [OUTPUT]: 设备连接、身份聚合任务、分页执行记录与有归属的产物预览、模型/草稿及任务协调。
+ * [OUTPUT]: 设备连接、单飞历史分页及最多三路执行详情读取、失败保留记录/恢复清除提示、产物/模型/草稿协调。
  * [POS]: UI 的远端会话控制器；发送失败保留草稿且不自动重发。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -19,18 +19,44 @@ import * as panels from "./panels.js";
 import { mergeModels } from "./catalog.js";
 import { runConversation } from "./automations.js";
 import { matchArtifacts } from "./artifacts.js";
+import { renderHistoryEdge } from "./history-scroll.js";
 const drafts = new Map();
 const automationDetails = new Map();
+const AUTOMATION_DETAIL_CONCURRENCY = 3;
 let lastAutomationRefresh = 0;
+let pendingOlderEpoch = null;
 let historyBusy = false,
   discoveryBusy = false,
   listEpoch = null,
-  historyError = false,
   lastListRefresh = 0;
 export const safe = (fn) =>
   Promise.resolve()
     .then(fn)
     .catch((error) => toast(error.message));
+function resetHistoryLoading() {
+  historyBusy = false;
+  pendingOlderEpoch = null;
+  state.loadingOlder = false;
+  state.olderError = null;
+  clearHistoryError();
+}
+function clearHistoryError() {
+  if (state.historyError) { state.historyError = null; banner(""); }
+}
+function finishHistoryLoading(expected) {
+  if (expected !== state.historyEpoch) return;
+  historyBusy = false;
+  state.loadingOlder = false;
+  renderHistoryEdge();
+  const pending = pendingOlderEpoch;
+  pendingOlderEpoch = null;
+  if (pending === expected) void loadOlder();
+}
+export async function loadOlder() {
+  if (!state.connected || state.loading || !state.hasOlder || state.loadingOlder) return;
+  if (historyBusy) { pendingOlderEpoch = state.historyEpoch; return; }
+  await loadHistory(true);
+}
 export function requireConnection() {
   if (!state.connected) {
     panels.deviceMenu($("#device-button"));
@@ -70,7 +96,7 @@ export async function connect(id) {
   panels.closePopover();
   const epoch = ++state.epoch;
   state.historyEpoch++;
-  historyBusy = false;
+  resetHistoryLoading();
   state.connected = false;
   state.session = null;
   state.automation = null;
@@ -180,9 +206,12 @@ export function resizeInput() {
   input.style.height = Math.min(220, Math.max(state.view === "home" ? 78 : 64, input.scrollHeight)) + "px";
 }
 export function newTask() {
+  panels.closeModal();
+  panels.closePopover();
   void native("artifactClose").catch(() => {});
   saveDraft();
   state.historyEpoch++;
+  resetHistoryLoading();
   state.session = null;
   state.automation = null;
   state.records = [];
@@ -210,6 +239,7 @@ export async function openSession(id) {
   panels.closePopover();
   const epoch = state.epoch,
     historyEpoch = ++state.historyEpoch;
+  resetHistoryLoading();
   state.session = item;
   state.automation = null;
   state.records = [];
@@ -243,36 +273,35 @@ export async function openSession(id) {
   }
 }
 export async function loadHistory(older = false, force = false, expected = state.historyEpoch) {
+  if (older && !state.hasOlder) return;
   if (state.automation) return loadAutomationHistory(older, force);
   const id = state.session?.id,
     epoch = state.epoch;
   if (!id || (!force && historyBusy) || !state.connected) return;
   historyBusy = true;
   state.loadingOlder = older;
+  if (older) { state.olderError = null; renderHistoryEdge(); }
   try {
     const query = { byteLength: 262144, resultScope: "page" };
     if (older && state.records.length) query.beforeRequestId = state.records[0].id;
     const page = await rpc("requests", id, query);
     if (epoch !== state.epoch || expected !== state.historyEpoch) return;
-    state.records = mergeRecords(state.records, listItems(page), older);
+    const merged = mergeRecords(state.records, listItems(page), older);
+    if (older && page?.hasOlder && merged[0]?.id === state.records[0]?.id) throw new Error("历史分页没有推进，请重试");
+    state.records = merged;
     if (older || state.records.length === listItems(page).length) state.hasOlder = Boolean(page?.hasOlder);
     state.loading = false;
-    if (historyError) {
-      historyError = false;
-      banner("");
-    }
+    clearHistoryError();
     renderMessages(force && !older);
   } catch (e) {
     if (expected === state.historyEpoch) {
+      if (older) { state.olderError = e.message; return; }
       if (force) throw e;
-      historyError = true;
+      state.historyError = e.message;
       banner("远端暂不可达：" + e.message);
     }
   } finally {
-    if (expected === state.historyEpoch) {
-      historyBusy = false;
-      state.loadingOlder = false;
-    }
+    finishHistoryLoading(expected);
   }
 }
 export async function config(key, value) {
@@ -420,7 +449,8 @@ async function openAutomation(task) {
   void native("artifactClose").catch(() => {});
   saveDraft();
   panels.closeModal(); panels.closePopover();
-  state.historyEpoch++;
+  const historyEpoch = ++state.historyEpoch;
+  resetHistoryLoading();
   state.session = null;
   state.automation = task;
   state.automationExpanded.clear();
@@ -431,20 +461,21 @@ async function openAutomation(task) {
   resetHistory(); renderPage(); renderMessages();
   try { await loadAutomationHistory(false, true); }
   catch (error) { toast(error.message); }
-  finally { if (state.automation?.id === task.id) { state.loading = false; renderMessages(true); } }
+  finally { if (state.historyEpoch === historyEpoch) { state.loading = false; renderMessages(true); } }
 }
 
 async function loadAutomationHistory(older = false, force = false) {
   const task = state.automation, epoch = state.epoch, historyEpoch = state.historyEpoch;
-  if (!task || historyBusy && !force || !force && !older && Date.now() - lastAutomationRefresh < 10000) return;
+  if (!task || historyBusy || !force && !older && Date.now() - lastAutomationRefresh < 10000) return;
   historyBusy = true;
   state.loadingOlder = older;
+  if (older) { state.olderError = null; renderHistoryEdge(); }
   try {
     const count = older ? state.records.length + 10 : Math.max(10, state.records.length);
     const page = await rpc("wb:automations:listRecords", {automationId: task.automationId, offset: 0, limit: count, withTotal: true});
     if (epoch !== state.epoch || historyEpoch !== state.historyEpoch) return;
     const records = listItems(page);
-    const results = await Promise.all(records.map(async record => {
+    const readDetail = async record => {
       const key = JSON.stringify([epoch, record.id, record.status, record.finishedAt, record.summary, record.resultTitle]);
       if (["success", "failed", "archived"].includes(record.status) && automationDetails.has(key)) return automationDetails.get(key);
       try {
@@ -454,16 +485,38 @@ async function loadAutomationHistory(older = false, force = false) {
         automationDetails.set(key, merged);
         return merged;
       } catch (error) { return {...record, detailError: error.message}; }
+    };
+    const results = new Array(records.length);
+    let next = 0;
+    await Promise.all(Array.from({length: Math.min(AUTOMATION_DETAIL_CONCURRENCY, records.length)}, async () => {
+      while (next < records.length && epoch === state.epoch && historyEpoch === state.historyEpoch) {
+        const index = next++;
+        results[index] = await readDetail(records[index]);
+      }
     }));
     if (epoch !== state.epoch || historyEpoch !== state.historyEpoch) return;
     state.automation = projectedSessions().find(x => x.id === task.id) ?? task;
-    state.records = results.sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
-    state.hasOlder = Number.isFinite(page.total) ? count < page.total : records.length === count;
+    const merged = new Map([...state.records, ...results].map(record => [record.id, record]));
+    const more = Number.isFinite(page.total) ? merged.size < page.total : records.length === count;
+    if (older && more && merged.size === state.records.length) throw new Error("历史分页没有推进，请重试");
+    state.records = [...merged.values()].sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id));
+    state.hasOlder = more;
     state.loading = false;
     lastAutomationRefresh = Date.now();
+    clearHistoryError();
     updateTitle(); renderMessages(force && !older);
-  } catch (error) { if (historyEpoch === state.historyEpoch) { if (force) throw error; banner("执行记录读取失败：" + error.message); } }
-  finally { if (historyEpoch === state.historyEpoch) { historyBusy = false; state.loadingOlder = false; } }
+  } catch (error) {
+    if (historyEpoch === state.historyEpoch) {
+      if (older) state.olderError = error.message;
+      else {
+        state.historyError = error.message;
+        state.loading = false;
+        banner("执行记录读取失败：" + error.message);
+        renderMessages();
+      }
+    }
+  }
+  finally { finishHistoryLoading(historyEpoch); }
 }
 
 export function expandAutomationRecord(id) {

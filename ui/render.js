@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 marked 的 GFM 解析、DOMPurify 的 HTML 净化与 UI 图标、产物引用识别。
- * [OUTPUT]: Markdown、安全消息块、执行过程折叠、正文与回复元数据。
+ * [OUTPUT]: Markdown、安全消息块、轻量过程行/真实详情折叠、正文与回复元数据。
  * [POS]: UI 的消息展示模块，不执行消息中的 HTML 或脚本。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -58,8 +58,12 @@ export function blocks(value, prefix = "block") {
     .map((block, index) => {
       const key = esc(prefix + ":" + (block.toolCallId ?? block.messageId ?? block.id ?? index));
       if (block.type === "text") return markdown(block.text ?? "");
-      if (isThought(block))
-        return `<details class="thinking" data-detail-key="${key}"><summary>${icon("spark")}<span>深度思考</span>${icon("chevron")}</summary><div class="detail-content thought-content">${markdown(block.text ?? textOf(block.content))}</div></details>`;
+      if (isThought(block)) {
+        const thought = String(block.text ?? textOf(block.content));
+        return thought.trim()
+          ? `<details class="thinking" data-detail-key="${key}"><summary><span>深度思考</span>${icon("chevron", "detail-chevron")}</summary><div class="detail-content thought-content">${markdown(thought)}</div></details>`
+          : '<div class="thinking process-row"><span>深度思考</span></div>';
+      }
       if (block.type === "image") {
         const src = block.uri ?? (block.data ? `data:${block.mimeType || "image/png"};base64,${block.data}` : "");
         return /^https:\/\//i.test(src) || /^data:image\/(png|jpeg|webp|gif);base64,/i.test(src)
@@ -70,11 +74,16 @@ export function blocks(value, prefix = "block") {
         return `<div class="attachment">${icon("file")}<span>${esc(block.name ?? block.title ?? block.uri?.split("/").pop() ?? "附件")}</span></div>`;
       if (isTool(block)) {
         const tool = toolPresentation(block);
-        return `<details class="tool-card" data-detail-key="${key}"><summary>${icon(tool.name === "Bash" ? "terminal" : "file")}<span>${esc(tool.label)}</span>${["failed", "error"].includes(block.status ?? block.state) ? '<small class="tool-error">失败</small>' : ""}${icon("chevron")}</summary><div class="detail-content tool-content">${tool.description ? `<div class="tool-description">${markdown(tool.description)}</div>` : ""}${tool.input !== undefined ? `<div class="tool-section"><span>输入</span>${payload(tool.input)}</div>` : ""}${tool.output !== undefined ? `<div class="tool-section"><span>输出</span>${payload(tool.output)}</div>` : ""}</div></details>`;
+        const row = `${tool.running ? '<span class="spinner process-spinner" aria-label="正在执行"></span>' : icon(tool.icon, "tool-icon")}<span class="process-label">${esc(tool.action)}</span>${tool.context ? `<small class="tool-context">${esc(tool.context)}</small>` : ""}${tool.failed ? '<small class="tool-error">失败</small>' : tool.cancelled ? '<small class="tool-cancelled">已取消</small>' : ""}`;
+        if (!tool.hasDetail) return `<div class="tool-card process-row" data-detail-key="${key}" title="${esc(tool.label)}">${row}</div>`;
+        const detail = {};
+        if (tool.input !== undefined && tool.input !== null) detail.parameters = tool.input;
+        if (tool.output !== undefined && tool.output !== null) detail.result = tool.output;
+        return `<details class="tool-card" data-detail-key="${key}"><summary title="${esc(tool.label)}">${row}${icon("chevron", "detail-chevron")}</summary><div class="detail-content tool-content">${tool.description ? `<div class="tool-description">${esc(tool.description)}</div>` : ""}${Object.keys(detail).length ? payload(detail) : ""}</div></details>`;
       }
       if (block.text) return markdown(block.text);
       if (block.content) return blocks(block.content, key);
-      return `<details class="tool-card" data-detail-key="${key}"><summary>${icon("file")}<span>${esc(block.type ?? "消息内容")}</span>${icon("chevron")}</summary><div class="detail-content">${payload(block)}</div></details>`;
+      return `<details class="tool-card" data-detail-key="${key}"><summary>${icon("file")}<span>${esc(block.type ?? "消息内容")}</span>${icon("chevron", "detail-chevron")}</summary><div class="detail-content tool-content">${payload(block)}</div></details>`;
     })
     .join("");
 }

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node test、jsdom 与实际 UI 模块。
- * [OUTPUT]: 验证安全富文本、顶部拖动排除控件、任务聚合与只读自动化展开/文件/执行会话及原有桥接流程。
+ * [OUTPUT]: 验证过程真实详情与安全性、历史分页/阅读位置、执行详情并发/错误恢复及二级页和桥接流程。
  * [POS]: tests 的 UI 边界与集成回归，不访问用户账号。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -93,6 +93,23 @@ test("执行过程默认收起，正文独立可见，工具详情不能注入�
   assert.equal(holder.querySelector(".tool-card summary").textContent.includes("completed"), false);
   assert.equal(holder.querySelector("button"), null);
 });
+test("精简过程行保留真实内容，无详情不显示空折叠，思考和工具详情安全展示", () => {
+  const holder = document.createElement('div');
+  holder.innerHTML = blocks([
+    {type: 'reasoning', text: '**检查方案**'},
+    {type: 'tool', toolName: 'ToolSearch', toolCallId: 'no-detail', status: 'completed'},
+    {type: 'tool', toolName: 'Read', input: {file_path: '/remote/a.md'}, output: '<button>危险按钮</button>', status: 'failed'},
+  ]);
+  assert.equal(holder.querySelector('.thinking summary > .icon:not(.detail-chevron)'), null);
+  assert.equal(holder.querySelector('.thought-content strong').textContent, '检查方案');
+  assert.equal(holder.querySelector('[data-detail-key="block:no-detail"]').tagName, 'DIV');
+  assert.equal(holder.querySelector('[data-detail-key="block:no-detail"] .detail-chevron'), null);
+  assert.equal(holder.querySelector('.tool-error').textContent, '失败');
+  const data = JSON.parse(holder.querySelector('.tool-content pre').textContent);
+  assert.equal(data.parameters.file_path, '/remote/a.md');
+  assert.equal(data.result, '<button>危险按钮</button>');
+  assert.equal(holder.querySelector('button'), null);
+});
 const until = async (predicate) => {
   for (let i = 0; i < 150; i++) {
     if (predicate()) return;
@@ -104,10 +121,13 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
   const calls = [];
   let rejectSend = false;
   let supportAutomations = false;
-  let olderAvailable = false, deferOlder = false, releaseOlder;
+  let olderAvailable = false, deferOlder = false, releaseOlder, rejectOlder = false;
+  let deferRefresh = false, releaseRefresh, automationPagination = false;
   let deferAutomation = false, releaseAutomation;
+  let rejectAutomation = false, activeDetails = 0, peakDetails = 0;
   const automation = {id: "daily", name: "每日测试", status: "ACTIVE", schedule: {type: "recurring", rrule: "FREQ=DAILY;BYHOUR=7;BYMINUTE=30"}, nextRunAt: Date.now() + 86400000};
   const automationRecord = {id: "auto-record", automationId: "daily", sessionId: "auto-session", startedAt: Date.now(), status: "success", summary: "**执行结果**"};
+  const automationRecords = Array.from({length: 11}, (_, i) => ({...automationRecord, id: i ? `auto-record-${i}` : automationRecord.id, startedAt: automationRecord.startedAt - i * 86400000}));
   let deferSend = false,
     releaseSend;
   const sessions = [{ id: "existing", title: "测试任务", state: "completed", updatedAt: Date.now() }];
@@ -144,9 +164,12 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
             if (method === "wb:connectors:list" || method === "wb:automations:list" && !supportAutomations)
               value = { errorCode: "METHOD_NOT_SUPPORTED", message: "测试设备不支持该方法" };
             else if (method === "wb:automations:list") value = [automation];
-            else if (method === "wb:automations:listRecords") value = {items: [automationRecord], total: 1};
-            else if (method === "wb:automations:getRecordDetail") value = {...automationRecord, runs: [{conversationId: "auto-session", output: "**执行结果**"}], artifacts: [{fileName: "report.html", size: 2048}]};
-            else if (method === "wb:experts:list") value = { items: [{ id: "expert", name: "测试专家" }] };
+            else if (method === "wb:automations:listRecords") value = rejectAutomation ? {errorCode:'PUBLISH_NETWORK_FAILED',message:'PUBLISH_NETWORK_FAILED'} : automationPagination ? {items: automationRecords.slice(0, values[0].limit), total: 11} : {items: [automationRecord], total: 1};
+            else if (method === "wb:automations:getRecordDetail") {
+              activeDetails++; peakDetails=Math.max(peakDetails,activeDetails);
+              value = {...automationRecords.find(x => x.id === values[0]), runs: [{conversationId: "auto-session", output: "**执行结果**"}], artifacts: [{fileName: "report.html", size: 2048}]};
+            }
+            else if (method === "wb:experts:list") value = { items: [{ id: "expert", name: {zh: "测试专家", en: "Test expert"}, description: {zh: "真实专家说明"} }] };
             else if (method === "wb:skills:installed")
               value = { items: [{ id: "skill", name: "测试技能", description: "真实只读目录内容" }] };
             else if (method === "wb:artifacts:list") value = { items: [{ id: "artifact-report", title: "report.html", mimeType: "text/html" }] };
@@ -170,7 +193,7 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
                 configManager: { model: "model", permissionMode: "fullAccess", mode: "craft" },
               };
             else if (method === "wb:conversations:requests")
-              value = { items: values[0] === "existing" ? values[1]?.beforeRequestId ? [{id: "history-older", requestSeq: 0, assistantMessage: {content: [{type: "text", text: "更早的回复"}]}}] : records : [], hasOlder: olderAvailable && !values[1]?.beforeRequestId };
+              value = rejectOlder && values[1]?.beforeRequestId ? {errorCode: "TEST_HISTORY", message: "历史读取失败"} : { items: values[0] === "existing" ? values[1]?.beforeRequestId ? [{id: "history-older", requestSeq: 0, assistantMessage: {content: [{type: "text", text: "更早的回复"}]}}] : records : [], hasOlder: olderAvailable && !values[1]?.beforeRequestId };
             else if (method === "wb:conversations:create") {
               const info = { id: "new-task", title: "新任务" };
               sessions.unshift(info);
@@ -179,8 +202,12 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
               value = rejectSend ? { errorCode: "TEST_REJECTED", message: "测试拒绝" } : null;
           }
           const response = structuredClone(value ?? null);
-          const complete = () => window.nativeReply({ id: message.id, value: response, error: null });
+          const complete = () => {
+            if(message.args?.method==='wb:automations:getRecordDetail') activeDetails--;
+            window.nativeReply({ id: message.id, value: response, error: null });
+          };
           if (deferOlder && message.args?.method === "wb:conversations:requests" && message.args.values[1]?.beforeRequestId) releaseOlder = complete;
+          else if (deferRefresh && message.args?.method === "wb:conversations:requests") releaseRefresh = complete;
           else if (deferAutomation && message.args?.method === "wb:automations:listRecords") releaseAutomation = complete;
           else if (deferSend && message.args?.method === "wb:conversations:sendPrompt") releaseSend = complete;
           else queueMicrotask(complete);
@@ -228,7 +255,7 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     );
     assert.ok(document.querySelector("#model-options").textContent.includes("自定义模型"));
     assert.equal(document.querySelector("#popover input"), null);
-    document.querySelector('[data-command="chooseModel"]').click();
+    document.querySelector('[data-model-id="custom:personal"]').click();
     await until(() => pageState.config.model === "custom:personal");
     assert.equal(document.querySelector("#model-button .control-label").textContent, "我的 GPT · 自定义");
     pageState.config = {};
@@ -250,26 +277,79 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     const sections = [...document.querySelectorAll("[data-settings-section]")].map((el) => el.dataset.settingsSection);
     assert.deepEqual(sections, ["通用", "外观", "快捷键", "模型", "设备连接"]);
     const settingsSearch = document.querySelector("#settings-search");
+    assert.ok(document.querySelector("#font-size"));
+    assert.ok(document.querySelector('[data-settings-section="通用"] .icon'));
+    settingsSearch.value = "设备";
+    settingsSearch.dispatchEvent(new dom.window.Event("input"));
+    assert.equal(document.querySelectorAll('.settings-group:not([hidden])').length, 1);
+    assert.equal(document.querySelector('[data-settings-section="通用"]').hidden, true);
+    settingsSearch.value = "";
+    settingsSearch.dispatchEvent(new dom.window.Event("input"));
     panels.settings("外观");
     assert.equal(document.querySelector("#settings-search"), settingsSearch);
-    const themeSelect = document.querySelector('#theme-select');
-    themeSelect.value = 'dark';
-    themeSelect.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(document.querySelectorAll('[data-theme-choice]').length, 3);
+    document.querySelector('[data-theme-choice="dark"]').click();
     await until(() => calls.some(c => c.action === 'appearance' && c.args.theme === 'dark'));
     assert.equal(document.documentElement.dataset.theme, 'dark');
-    themeSelect.value = 'light';
-    themeSelect.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(document.querySelector('[data-theme-choice="dark"]').getAttribute('aria-pressed'), 'true');
+    document.querySelector('[data-theme-choice="light"]').click();
     await until(() => calls.filter(c => c.action === 'appearance').at(-1)?.args.theme === 'light');
     assert.equal(document.documentElement.dataset.theme, 'light');
-    themeSelect.value = 'system';
-    themeSelect.dispatchEvent(new dom.window.Event('change'));
+    document.querySelector('[data-theme-choice="system"]').click();
     await until(() => document.documentElement.dataset.theme === 'dark');
     assert.equal(calls.filter(c => c.action === 'appearance').at(-1).args.preference, 'system');
+    panels.settings("快捷键");
+    const shortcuts = document.querySelector('#shortcut-search');
+    shortcuts.value = '换行';
+    shortcuts.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(document.querySelectorAll('.shortcut-table tbody tr:not([hidden])').length, 1);
+    panels.closeModal();
+    panels.searchDialog();
+    assert.match(document.querySelector('.search-empty').textContent, /输入关键字/);
+    const search = document.querySelector('#search-input');
+    search.value = '测试'; search.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(document.querySelector('.search-result strong').textContent, '测试任务');
+    search.dispatchEvent(new dom.window.KeyboardEvent('keydown', {bubbles: true, key: 'ArrowDown'}));
+    assert.equal(document.activeElement, document.querySelector('.search-result'));
+    document.querySelector('[data-search-tab="空间"]').click();
+    assert.match(document.querySelector('.search-empty').textContent, /没有找到/);
+    document.querySelector('#search-clear').click();
+    assert.equal(search.value, '');
+    assert.equal(document.activeElement, search);
+    document.querySelector('[data-search-tab="全部"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', {bubbles: true, key: 'End'}));
+    assert.equal(document.querySelector('[aria-selected="true"]').dataset.searchTab, '空间');
     panels.closeModal();
     await panels.catalog("skills");
+    assert.ok(document.querySelector('.catalog-page'));
+    assert.equal(document.querySelector('.catalog-page').getAttribute('role'), 'region');
+    assert.equal(document.querySelector('.catalog-page').hasAttribute('aria-modal'), false);
+    const catalogDragCount = calls.filter(c => c.action === "dragWindow").length;
+    document.querySelector('.catalog-header').dispatchEvent(new dom.window.MouseEvent('mousedown', {bubbles: true, button: 0}));
+    await until(() => calls.filter(c => c.action === "dragWindow").length === catalogDragCount + 1);
+    document.querySelector('#catalog-search').dispatchEvent(new dom.window.MouseEvent('mousedown', {bubbles: true, button: 0}));
+    assert.equal(calls.filter(c => c.action === "dragWindow").length, catalogDragCount + 1);
+    const catalogTab = new dom.window.KeyboardEvent('keydown', {bubbles: true, cancelable: true, key: 'Tab'});
+    document.querySelector('.catalog-header').dispatchEvent(catalogTab);
+    assert.equal(catalogTab.defaultPrevented, false);
     assert.ok(document.querySelector("article.catalog-card"));
     assert.equal(document.querySelector('[data-catalog-type="skills"]'), null);
     assert.equal(document.querySelector('[data-catalog-tab="connectors"]'), null);
+    const catalogSearch = document.querySelector('#catalog-search');
+    catalogSearch.value = '无匹配'; catalogSearch.dispatchEvent(new dom.window.Event('input'));
+    assert.equal(document.querySelector('article.catalog-card'), null);
+    assert.match(document.querySelector('.catalog-grid').textContent, /没有匹配/);
+    await panels.catalog("experts");
+    assert.equal(document.querySelector('.catalog-card strong').textContent, '测试专家');
+    assert.equal(document.querySelector('.catalog-card p').textContent, '真实专家说明');
+    assert.equal(document.querySelector('.catalog-grid').textContent.includes('[object Object]'), false);
+    pageState.config.expertId = 'expert';
+    const {updateComposer} = await import('../ui/view.js');
+    updateComposer();
+    assert.equal(document.querySelector('.context-chip[data-action="expert"]').textContent, '测试专家');
+    delete pageState.config.expertId;
+    document.querySelector('[data-action="new"]').click();
+    await until(() => document.querySelector('#modal-layer').hidden || document.querySelector('#modal-layer').inert);
+    assert.equal(pageState.view, 'home');
     panels.closeModal();
     document.querySelector('[data-session="existing"]').click();
     await until(() => document.querySelector(".assistant-message strong")?.textContent === "测试回复");
@@ -316,6 +396,39 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     assert.equal(document.querySelector(".execution-process").open, true);
     assert.equal(document.querySelector('[data-detail-key="process:stable-tool"]').open, true);
     assert.equal(document.querySelector(".thinking").open, false);
+
+    // 后台轮询占用时记住一次到顶意图；失败停止自动重试，上滑才重试。
+    document.querySelector('[data-session="existing"]').click();
+    await until(() => !pageState.loading);
+    olderAvailable = true;
+    await loadHistory(false, true);
+    deferRefresh = true;
+    const refresh = loadHistory();
+    await until(() => releaseRefresh);
+    historyScroll.scrollTop = 0;
+    rejectOlder = true;
+    const countOlder = () => calls.filter(c => c.args?.method === "wb:conversations:requests" && c.args.values[1]?.beforeRequestId).length;
+    const queuedCount = countOlder();
+    historyScroll.dispatchEvent(new dom.window.Event("scroll"));
+    historyScroll.dispatchEvent(new dom.window.Event("scroll"));
+    assert.equal(countOlder(), queuedCount);
+    deferRefresh = false;
+    releaseRefresh();
+    await refresh;
+    await until(() => pageState.olderError && !pageState.loadingOlder);
+    assert.equal(countOlder(), queuedCount + 1);
+    historyScroll.dispatchEvent(new dom.window.Event("scroll"));
+    assert.equal(countOlder(), queuedCount + 1);
+    assert.match(document.querySelector(".history-edge").textContent, /失败/);
+    rejectOlder = false;
+    historyScroll.scrollTop = 0;
+    historyScroll.dispatchEvent(new dom.window.WheelEvent("wheel", {deltaY: -10}));
+    await until(() => !pageState.olderError && !pageState.loadingOlder && !pageState.hasOlder);
+    assert.equal(countOlder(), queuedCount + 2);
+    historyScroll.scrollTop = 0;
+    historyScroll.dispatchEvent(new dom.window.WheelEvent("wheel", {deltaY: -10}));
+    assert.equal(countOlder(), queuedCount + 2);
+    olderAvailable = false;
 
     sessions[0].title = "远端更新后的标题";
     await loadSessions();
@@ -377,6 +490,30 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     const {send} = await import("../ui/controller.js");
     await send();
     assert.equal(calls.filter(c => c.args?.method === "wb:conversations:sendPrompt").length, sent);
+    automationPagination = true;
+    peakDetails = 0;
+    await loadHistory(false, true);
+    assert.equal(pageState.records.length, 10);
+    assert.ok(peakDetails <= 3, '明细读取限制突发请求');
+    Object.defineProperty(historyScroll, "scrollHeight", {configurable: true, get: () => 300 + (document.querySelector('[data-automation-record="auto-record-10"]') ? 500 : 0)});
+    Object.defineProperty(historyScroll, "clientHeight", {configurable: true, value: 400});
+    historyScroll.scrollTop = 0;
+    const autoBefore = calls.filter(c => c.args?.method === "wb:automations:listRecords").length;
+    historyScroll.dispatchEvent(new dom.window.WheelEvent("wheel", {deltaY: -10}));
+    historyScroll.dispatchEvent(new dom.window.Event("scroll"));
+    await until(() => pageState.records.length === 11 && !pageState.loadingOlder);
+    assert.equal(calls.filter(c => c.args?.method === "wb:automations:listRecords").length, autoBefore + 1);
+    assert.equal(historyScroll.scrollTop, 500);
+    assert.equal(pageState.hasOlder, false);
+    assert.equal(document.querySelector('button[data-action="older"]'), null);
+    assert.equal(document.querySelector('[data-action="expandAutomationRecord"][data-record="auto-record"]').getAttribute("aria-expanded"), "true");
+    rejectAutomation = true;
+    await loadHistory(false, true);
+    assert.equal(pageState.records.length, 11);
+    assert.match(document.querySelector('#connection-banner').textContent, /网络/);
+    rejectAutomation = false;
+    await loadHistory(false, true);
+    assert.equal(document.querySelector('#connection-banner').hidden, true, '读取恢复后移除旧错误提示');
     document.querySelector('[data-action="openAutomationConversation"]').click();
     await until(() => pageState.session?.id === "auto-session" && !pageState.loading);
     assert.equal(pageState.automation, null);
@@ -391,6 +528,17 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     assert.equal(pageState.automation, null);
     assert.equal(pageState.session.id, "existing");
     assert.equal(document.querySelector(".assistant-message strong").textContent, "测试回复");
+    deferAutomation = false;
+    rejectAutomation = true;
+    document.querySelector('[data-session="automation:daily"]').click();
+    await until(() => !pageState.loading && pageState.historyError);
+    assert.equal(pageState.records.length, 0);
+    assert.equal(document.querySelector('#messages').textContent.includes('暂无执行记录'), false);
+    assert.ok(document.querySelector('#messages [data-action="refreshAutomation"]'));
+    rejectAutomation = false;
+    document.querySelector('#messages [data-action="refreshAutomation"]').click();
+    await until(() => pageState.records.length && !pageState.historyError);
+    assert.equal(document.querySelector('#connection-banner').hidden, true);
     assert.ok(calls.filter((c) => c.action === "rpc").every((c) => !c.args.method.includes("cloud")));
   } finally {
     intervals.forEach(clearInterval);

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖原生桥、共享状态、transcript 正文分层、主视图及次级面板。
- * [OUTPUT]: 页面初始化、顶部原生拖动、自动化展开/执行会话/文件路由、正文复制与菜单/键盘交互。
+ * [OUTPUT]: 页面初始化、主区/目录顶部拖动、历史自动加载、自动化/文件路由、搜索和浮层焦点交互。
  * [POS]: UI 入口，将用户动作路由到 controller 和 panels。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,6 +10,7 @@ import { renderPage, renderSidebar, renderMessages, resetHistory, updateComposer
 import { replyParts } from "./transcript.js";
 import * as panels from "./panels.js";
 import { toggleSidebar } from "./motion.js";
+import { installHistoryScroll } from "./history-scroll.js";
 import {
   safe,
   requireConnection,
@@ -21,6 +22,7 @@ import {
   newTask,
   openSession,
   loadHistory,
+  loadOlder,
   config,
   send,
   stop,
@@ -32,7 +34,7 @@ import {
 } from "./controller.js";
 
 document.addEventListener("mousedown", (event) => {
-  if (event.button !== 0 || !event.target.closest("#titlebar,.sidebar-tools")) return;
+  if (event.button !== 0 || !event.target.closest("#titlebar,.sidebar-tools,.catalog-header")) return;
   if (event.target.closest('button,a,input,textarea,select,[role="button"]')) return;
   event.preventDefault();
   safe(() => native("dragWindow"));
@@ -169,7 +171,7 @@ async function command(type, data = {}, anchor) {
     case "about":
       information(
         "WorkBuddy Remote",
-        "0.3.2 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
+        "0.3.7 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
       );
       break;
     case "logout":
@@ -212,9 +214,6 @@ async function command(type, data = {}, anchor) {
       break;
     case "stop":
       await stop();
-      break;
-    case "older":
-      await loadHistory(true, true);
       break;
     case "scrollBottom":
       $("#messages-scroll").scrollTop = $("#messages-scroll").scrollHeight;
@@ -388,7 +387,7 @@ document.addEventListener("keydown", (e) => {
   }
   const modal = $("#modal-layer"),
     pop = $("#popover");
-  const scope = !pop.hidden && !pop.inert ? pop : !modal.hidden && !modal.inert ? modal : null;
+  const scope = !pop.hidden && !pop.inert ? pop : !modal.hidden && !modal.inert && !modal.querySelector(".catalog-page") ? modal : null;
   if (scope && e.key === "Tab") {
     const focusable = [...scope.querySelectorAll('button:not(:disabled),input,select,[tabindex="0"]')].filter(
       (x) => !x.hidden,
@@ -437,6 +436,7 @@ window.nativeEvent = ({ type, data }) => {
   if (type === "settings") panels.settings();
 };
 document.body.classList.add("wb-polished");
+installHistoryScroll(loadOlder);
 paintIcons();
 panels.applyAppearance();
 matchMedia("(prefers-color-scheme:dark)").addEventListener("change", panels.applyAppearance);

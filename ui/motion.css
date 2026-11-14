@@ -1,6 +1,6 @@
 /*
  * [INPUT]: 现有主题令牌、motion.js 与 ui-craft / motion-match 的动效合同。
- * [OUTPUT]: 统一微交互、侧栏滑动、焦点与任务右侧状态/悬停菜单、下拉箭头和视觉状态。
+ * [OUTPUT]: 统一微交互、侧栏滑动、焦点与任务状态/悬停菜单；二级页面几何由 panels.css 负责。
  * [POS]: UI 的最后一层视觉精修；不引入业务功能或动画依赖。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -265,13 +265,7 @@ body.wb-polished #popover[data-placement="above"] {
 body.wb-polished #popover[data-placement="below"] {
   transform-origin: center top;
 }
-body.wb-polished .menu-row {
-  min-height: 36px;
-  border-radius: 8px;
-  padding: 8px 10px;
-  gap: 10px;
-}
-body.wb-polished .menu-row > .icon {
+body.wb-polished #popover .menu-row > .icon {
   width: 17px;
   height: 17px;
   color: var(--muted);
@@ -291,11 +285,7 @@ body.wb-polished .menu-row.danger:hover {
   background: #b6384c0c;
 }
 body.wb-polished .menu-row.selected {
-  background: var(--hover);
-}
-body.wb-polished .menu-title {
-  letter-spacing: 0.15px;
-  padding: 9px 10px;
+  background: var(--selected);
 }
 body.wb-polished .device-card {
   border-color: var(--border);
@@ -337,48 +327,14 @@ body.wb-polished .dialog input:not([type="range"]):focus {
   border-color: #1ba88e70;
   box-shadow: var(--wb-focus);
 }
-body.wb-polished .search-box input:focus {
+body.wb-polished .dialog .search-box input:focus,
+body.wb-polished .dialog .settings-search input:focus,
+body.wb-polished .dialog .shortcut-search input:focus,
+body.wb-polished .dialog .catalog-search input:focus {
   box-shadow: none;
   border-color: transparent;
 }
-body.wb-polished .settings-nav {
-  padding: 22px 16px;
-  border-right: 1px solid #00000003;
-}
-body.wb-polished .settings-nav .menu-row {
-  font-size: 13px;
-  min-height: 35px;
-}
-body.wb-polished .setting-card {
-  box-shadow: 0 1px 2px #00000002;
-}
-body.wb-polished .setting-row label {
-  font-size: 13px;
-}
-body.wb-polished .setting-row small {
-  font-size: 12px;
-}
-body.wb-polished input[type="range"] {
-  accent-color: var(--teal);
-}
-body.wb-polished .catalog-card {
-  gap: 10px;
-  border-radius: 12px;
-  padding: 18px;
-}
-body.wb-polished button.catalog-card:hover {
-  border-color: #14b89e55;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px #00000004;
-}
-body.wb-polished article.catalog-card {
-  cursor: default;
-}
-body.wb-polished .catalog-card > .icon {
-  width: 24px;
-  height: 24px;
-  color: var(--teal);
-}
+/* -- 二级页面几何由 panels.css 统一维护，精修层不再覆盖字号、间距和卡片。 -- */
 body.wb-polished .buddy-icon {
   background: transparent;
   border: 0;

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WebKit 的独立浏览器会话和 lib/wire.mjs。
- * [OUTPUT]: 提供登录、设备发现、只读自动化记录/详情、单飞连接检查与只读断线重试、受限远程调用与模型展示字段及原生确认后的产物定位。
+ * [OUTPUT]: 提供登录/设备、网络阶段错误、单飞连接检查与只读瞬断单次恢复、受限调用和模型展示字段及点击附件后的产物定位。
  * [POS]: MacApp 的账号与协议边界，被原生入口和本地页面桥使用。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -10,6 +10,23 @@ import WebKit
 enum RemoteFailure: LocalizedError {
     case message(String)
     var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+}
+
+// -- 只读恢复边界：网络故障最多重试一次，写入与业务拒绝不自动重发 --
+@MainActor
+enum RemoteRequestRecovery {
+    static func perform<Value>(readOnly: Bool, operation: () async throws -> Value,
+        beforeRetry: () async throws -> Void = { try await Task.sleep(nanoseconds: 300_000_000) }) async throws -> Value {
+        do { return try await operation() }
+        catch {
+            let transient = ["CHANNEL_CLOSED", "PUBLISH_NETWORK_FAILED", "PUBLISH_TIMEOUT",
+                "PUBLISH_HTTP_502", "PUBLISH_HTTP_503", "PUBLISH_HTTP_504",
+                "CREDENTIALS_NETWORK_FAILED", "CREDENTIALS_TIMEOUT"]
+            guard readOnly, transient.contains(where: { error.localizedDescription.contains($0) }) else { throw error }
+            try await beforeRetry()
+            return try await operation()
+        }
+    }
 }
 
 @MainActor
@@ -60,11 +77,21 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         if (uid) headers['X-User-Id'] = uid;
         const options = {method: body ? 'POST' : 'GET', credentials:'include', headers};
         if (body) {headers['Content-Type']='application/json'; options.body=JSON.stringify(body);}
-        const response = await fetch(route, options);
-        if (!response.ok) throw new Error('HTTP_'+response.status);
-        const payload = await response.json();
-        if (payload.code !== undefined && payload.code !== 0) throw new Error('API_'+payload.code);
-        return payload.data ?? payload;
+        const stage = route === '/edge-cloud/credentials' ? 'CREDENTIALS' : 'API';
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        options.signal = controller.signal;
+        try {
+          const response = await fetch(route, options);
+          if (!response.ok) throw new Error('HTTP_'+response.status);
+          const payload = await response.json();
+          if (payload.code !== undefined && payload.code !== 0) throw new Error('API_'+payload.code);
+          return payload.data ?? payload;
+        } catch (error) {
+          if (error.name === 'AbortError') throw new Error(stage+'_TIMEOUT');
+          if (error instanceof TypeError) throw new Error(stage+'_NETWORK_FAILED');
+          throw error;
+        } finally { clearTimeout(timer); }
         """
         guard let value = try await run(script, ["route": route, "uid": userID, "body": body.map { $0 as Any } ?? NSNull()]) as? [String: Any] else {
             throw RemoteFailure.message("接口返回格式不符合预期")
@@ -126,19 +153,14 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard conversations.map({"wb:conversations:" + $0}).contains(method) || catalogs.contains(method) || (method == "wb:artifacts:locate" && allowArtifactTransfer) else {
             throw RemoteFailure.message("此远程动作尚未接入")
         }
-        try await ensureConnection()
-        guard targetID == requestedTarget else {throw RemoteFailure.message("目标设备已切换，请在当前设备重新操作。")}
         let command: [String: Any] = ["type": method, "args": args]
-        let send = { try await self.run("const reply=await window.wbRemote.request(command);if(!reply.success)throw new Error(reply.code ?? 'REMOTE_REJECTED');return {result:reply.result ?? null};", ["command": command]) as? [String: Any] }
-        let value: [String: Any]?
-        do { value = try await send() }
-        catch {
-            let readOnly = catalogs.contains(method) || ["list", "get", "requests"].contains(where: {method == "wb:conversations:" + $0})
-            guard readOnly, error.localizedDescription.contains("CHANNEL_CLOSED") else { throw error }
-            try await ensureConnection()
-            guard targetID == requestedTarget else { throw RemoteFailure.message("目标设备已切换") }
-            value = try await send()
+        let send = {
+            try await self.ensureConnection()
+            guard self.targetID == requestedTarget else { throw RemoteFailure.message("目标设备已切换，请在当前设备重新操作。") }
+            return try await self.run("const reply=await window.wbRemote.request(command);if(!reply.success)throw new Error(reply.code ?? 'REMOTE_REJECTED');return {result:reply.result ?? null};", ["command": command]) as? [String: Any]
         }
+        let readOnly = catalogs.contains(method) || ["list", "get", "requests"].contains(where: {method == "wb:conversations:" + $0})
+        let value = try await RemoteRequestRecovery.perform(readOnly: readOnly, operation: send)
         if ["wb:models:list", "wb:models:customs"].contains(method), let result = value?["result"] {
             let items = (result as? [String: Any])?["items"] as? [[String: Any]] ?? result as? [[String: Any]]
             guard let items else { throw RemoteFailure.message("模型列表格式无法识别") }

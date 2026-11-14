@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-remote-mac",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.7",
   "type": "module",
   "scripts": {
     "build:ui": "esbuild ui/app.js --bundle --format=iife --platform=browser --target=safari16 --outfile=work/ui-build/app.js",

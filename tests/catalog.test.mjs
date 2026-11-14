@@ -1,12 +1,21 @@
 /**
  * [INPUT]: 依赖 Node test 与实际 catalog.js。
- * [OUTPUT]: 验证自定义模型 ID 对应、去重、禁用状态及工作空间末级名称。
+ * [OUTPUT]: 验证多语言目录名称/说明、自定义模型 ID、禁用状态与工作空间名称。
  * [POS]: tests 的目录归一回归，防止展示名称替代真实远端选择 ID。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeModels, workspaceName, workspacePath, workspaceHint } from "../ui/catalog.js";
+import { mergeModels, workspaceName, workspacePath, workspaceHint, catalogText, catalogName, catalogDescription } from "../ui/catalog.js";
+test("目录多语言字段优先中文并回退英文，未知对象不显示为 Object", () => {
+  assert.equal(catalogName({id: "raw", name: {zh: "中文专家", en: "English"}}), "中文专家");
+  assert.equal(catalogName({name: "raw", displayName: {en: "Display"}}), "Display");
+  assert.equal(catalogDescription({description: {zh: "说明", en: "Description"}}), "说明");
+  assert.equal(catalogDescription({displayDescription: {en: "Display description"}}), "Display description");
+  assert.equal(catalogName({id: "valid-id", name: {unexpected: "未知形状"}}), "valid-id");
+  assert.equal(catalogText({zh: 123}), "");
+  assert.equal(catalogText(null), "");
+});
 test("自定义模型名称合并到已发布的真实 ID，不生成重复选项", () => {
   const models = mergeModels(
     [{ id: "custom:my-gpt", name: "my-gpt", custom: true }],

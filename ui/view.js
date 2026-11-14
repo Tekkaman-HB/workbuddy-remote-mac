@@ -1,16 +1,17 @@
 /**
- * [INPUT]: 依赖共享 state、tasks 任务/时间投影、automations 历史卡片、catalog、消息渲染与图标。
+ * [INPUT]: 依赖共享 state、tasks 时间投影、automations 卡片、catalog 多语言名称、消息渲染、history-scroll 锚点与图标。
  * [OUTPUT]: 身份聚合侧栏、右侧未读/真实时间、普通聊天与自动化日期卡片、稳定折叠及连接状态 DOM。
  * [POS]: UI 的主要视图；操作由 controller.js 和 app.js 协调。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import { state, $, escapeHTML as esc, visibleSessions, relativeDate, isRunning } from "./state.js";
 import { icon } from "./icons.js";
-import { modelId, modelName, workspaceName, workspacePath } from "./catalog.js";
+import { modelId, modelName, workspaceName, workspacePath, catalogName } from "./catalog.js";
 import { blocks, assistantReply, messageActions } from "./render.js";
 import { enter, reveal, dismiss } from "./motion.js";
 import { fullDate, scheduleLabel } from "./tasks.js";
 import { automationMessages } from "./automations.js";
+import { renderHistoryEdge, captureHistoryPosition, restoreHistoryPosition } from "./history-scroll.js";
 export function taskRows(items) {
   return items
     .map(
@@ -128,7 +129,7 @@ export function updateComposer() {
   const expert = state.config.expertId;
   $("#composer-tags").innerHTML =
     expert && state.features.experts
-      ? `<button class="context-chip" data-action="expert">${icon("owl")}${esc(state.catalogs.experts?.find((x) => (x.id ?? x.expertId) === expert)?.name ?? expert)}</button>`
+      ? `<button class="context-chip" data-action="expert">${icon("owl")}${esc(catalogName(state.catalogs.experts?.find((x) => (x.id ?? x.expertId) === expert) ?? {id: expert}))}</button>`
       : "";
   const running = state.sending || isRunning(state.session?.state) || isRunning(state.records.at(-1)?.state);
   $("#send-button").hidden = running;
@@ -149,20 +150,9 @@ function requestHTML(record) {
 }
 export function renderMessages(forceBottom = false) {
   if (state.automation) { automationMessages(forceBottom); return; }
-  const root = $("#messages"),
-    scroll = $("#messages-scroll");
-  const oldHeight = scroll.scrollHeight,
-    oldTop = scroll.scrollTop;
-  const nearBottom = oldHeight - scroll.clientHeight - oldTop < 100;
-  let older = root.querySelector(".older");
-  if (state.hasOlder && !older) {
-    older = document.createElement("button");
-    older.className = "older";
-    older.dataset.action = "older";
-    older.textContent = "加载更早的记录";
-    root.prepend(older);
-  }
-  if (!state.hasOlder) older?.remove();
+  const root = $("#messages");
+  const position = captureHistoryPosition();
+  const edge = renderHistoryEdge();
   root
     .querySelectorAll(":scope > .empty,:scope > .reply-status,:scope > .loading-skeleton")
     .forEach((el) => el.remove());
@@ -175,7 +165,7 @@ export function renderMessages(forceBottom = false) {
     );
   }
   const active = new Set();
-  let previous = older;
+  let previous = edge;
   for (const record of state.records) {
     active.add(record.id);
     const signature = JSON.stringify([
@@ -215,9 +205,7 @@ export function renderMessages(forceBottom = false) {
       messageNodes.delete(id);
     }
   }
-  if (forceBottom || nearBottom) scroll.scrollTop = scroll.scrollHeight;
-  else if (state.loadingOlder) scroll.scrollTop = oldTop + (scroll.scrollHeight - oldHeight);
-  else scroll.scrollTop = oldTop;
+  restoreHistoryPosition(position, forceBottom);
   updateComposer();
 }
 export function toast(text) {

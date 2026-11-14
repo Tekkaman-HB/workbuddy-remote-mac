@@ -11,7 +11,7 @@
 [![platform](https://img.shields.io/badge/platform-macOS%2013%2B-000000?logo=apple&logoColor=white)](#)
 [![swift](https://img.shields.io/badge/Swift-AppKit%20%C2%B7%20WebKit-F05138?logo=swift&logoColor=white)](MacApp/)
 [![node](https://img.shields.io/badge/Node.js-22%2B%20%E6%9E%84%E5%BB%BA-339933?logo=nodedotjs&logoColor=white)](package.json)
-[![version](https://img.shields.io/badge/version-0.3.2-blue)](#最近更新)
+[![version](https://img.shields.io/badge/version-0.3.7-blue)](#最近更新)
 [![tests](https://img.shields.io/badge/tests-29%20%E9%A1%B9%E9%80%9A%E8%BF%87-brightgreen)](tests/)
 
 </div>
@@ -84,7 +84,7 @@ zsh build.command   # 产出 dist/WorkBuddy Remote.app
 
 - 凭证仅存在于登录 WebKit 会话；内置页面通过受限原生桥调用，不接收登录令牌或通道密钥
 - HTML 报告预览运行在**无登录态、无原生桥**的沙箱中，仅允许常见图表 CDN 与内联脚本
-- 报告原文件只做内存缓存；首次传输前确认官方接口的网盘上传与分享行为
+- 点击附件即获取并预览；官方文件接口可能经腾讯网盘上传/分享传回，原文件仅做内存缓存
 - 只读接口只提供只读页面；连接时探测目录接口，失败的能力不显示入口
 
 ## 当前能力
@@ -118,6 +118,16 @@ zsh build.command   # 产出 dist/WorkBuddy Remote.app
 </details>
 
 ## 最近更新
+
+**0.3.7** —— 点击附件直接获取并预览，移除重复确认框；执行记录中的附件横向排列，空间不足时自动换行。
+
+**0.3.6** —— 阅读区随窗口伸展，减少全屏留白；执行记录读取失败保留已有内容并显示重试入口，恢复后清除旧提示；详情最多三路并发，只读网络瞬断最多重试一次。
+
+**0.3.5** —— 对照原版精简思考/工具过程：紧凑灰字、分类图标、悬停箭头、思考内容细线和统一详情卡片；无详情不显示空折叠，仅展示远端真实返回内容。
+
+**0.3.4** —— 修复设置与搜索窗口关闭按钮的叉号被全局图标样式放大、悬停时溢出红色圆点的问题。
+
+**0.3.3** —— 普通会话和定时任务历史滚动到顶部自动加载，保持阅读位置并支持上滑重试；对照同一远端原版重做搜索分组/键盘导航、设置间距/图标/主题卡片及主区目录，仍仅开放已接入能力。
 
 **0.3.2** —— 对齐远端 WorkBuddy 的侧栏和执行历史：顶部空白可拖动窗口，任务/空间按真实身份分流；侧栏显示分钟、小时和日期；定时任务使用日期分组的结果/文件卡片，支持查看全部和打开实际执行会话。深浅主题、报告预览与原文件保存继续保留。
 

@@ -1,15 +1,15 @@
 /**
- * [INPUT]: 依赖共享 state、受限 rpc、catalog 名称/路径与模型归一、视图和图标。
- * [OUTPUT]: 在线设备/模型/空间菜单、投影任务搜索、设置、原生主题同步、文件列表及指定执行会话的产物预览入口。
+ * [INPUT]: 依赖共享 state、受限 rpc、catalog 多语言名称/路径/模型归一、视图和图标。
+ * [OUTPUT]: 在线设备/模型/空间菜单、分组任务/空间搜索、原版设置排版与主题卡片、原生主题同步、文件列表及指定执行会话的产物预览入口。
  * [POS]: UI 的次级交互，实际会话变更交给 app.js。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions } from "./state.js";
+import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions, relativeDate } from "./state.js";
 import { matchArtifacts } from "./artifacts.js";
 import { icon } from "./icons.js";
-import { toast, taskRows, updateComposer } from "./view.js";
+import { toast, updateComposer } from "./view.js";
 import { reveal, dismiss, enter, layoutChange } from "./motion.js";
-import { mergeModels, modelId, modelName, workspaceName, workspacePath, workspaceHint } from "./catalog.js";
+import { mergeModels, modelId, modelName, workspaceName, workspacePath, workspaceHint, catalogName, catalogDescription } from "./catalog.js";
 export const action = (type, data = {}) =>
   document.dispatchEvent(new CustomEvent("command", { detail: { type, ...data } }));
 let anchorElement = null,
@@ -63,7 +63,8 @@ export function modal(html, cls = "dialog") {
   const root = $("#modal-layer");
   const replacing = !root.hidden && !root.inert;
   if (!replacing) previousFocus = document.activeElement;
-  root.innerHTML = `<section class="${cls}" role="dialog" aria-modal="true">${html}</section>`;
+  const page = cls.includes("catalog-page");
+  root.innerHTML = `<section class="${cls}" role="${page ? "region" : "dialog"}" ${page ? 'aria-label="远端目录"' : 'aria-modal="true"'}>${html}</section>`;
   reveal(root, { kind: "backdrop", immediate: replacing });
   enter(root.firstElementChild, { distance: 7, duration: 220 });
   root.querySelector("input,button,select,textarea")?.focus({ preventScroll: true });
@@ -106,23 +107,23 @@ export function modelMenu(anchor) {
     closePopover();
     return;
   }
-  popover(anchor, '<div class="menu-title">选择模型</div><div id="model-options"></div>', 350);
+  popover(anchor, '<div id="model-options"></div>', 340);
   const root = $("#model-options"),
     epoch = state.epoch;
   const render = () => {
     const focusedId = root.contains(document.activeElement) ? document.activeElement.dataset.modelId : null;
     const options = state.models.map((m, index) => ({ m, index }));
     root.innerHTML =
-      [true, false]
+      [false, true]
         .map((custom) => {
           const group = options.filter(({ m }) => Boolean(m.custom) === custom);
           if (!group.length) return "";
           return (
-            `<div class="menu-title">${custom ? "自定义模型" : "内置模型"}</div>` +
+            (custom ? '<div class="menu-title">自定义模型</div>' : "") +
             group
               .map(
                 ({ m, index }) =>
-                  `<button class="menu-row catalog-option" data-command="chooseModel" data-model-id="${esc(modelId(m))}" data-index="${index}" title="${esc(m.disabled ? m.disabledReason || "模型不可用" : modelId(m))}" ${m.disabled ? "disabled" : ""}>${icon(custom ? "plug" : "spark")}<span class="option-label"><strong>${esc(modelName(m))}</strong><small>${esc([typeof m.vendor === "string" && m.vendor.length > 1 ? m.vendor : "", modelId(m) !== modelName(m) ? modelId(m) : ""].filter(Boolean).join(" · "))}</small></span>${modelId(m) === state.config.model ? icon("check", "check") : ""}</button>`,
+                  `<button class="menu-row model-option" data-command="chooseModel" data-model-id="${esc(modelId(m))}" data-index="${index}" title="${esc(m.disabled ? m.disabledReason || "模型不可用" : modelId(m))}" ${m.disabled ? "disabled" : ""}>${icon(custom ? "plug" : "spark")}<span class="name">${esc(modelName(m))}</span>${modelId(m) === state.config.model ? icon("check", "check") : ""}</button>`,
               )
               .join("")
           );
@@ -134,7 +135,7 @@ export function modelMenu(anchor) {
         ?.focus({ preventScroll: true });
   };
   render();
-  root.querySelector("button:not(:disabled)")?.focus({ preventScroll: true });
+  (root.querySelector('.model-option:has(.check)') ?? root.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
   const refresh = async () => {
     root.setAttribute("aria-busy", "true");
     const results = await Promise.allSettled([rpc("wb:models:list"), rpc("wb:models:customs")]);
@@ -231,7 +232,7 @@ export function accountMenu(anchor) {
       '<div class="menu-separator"></div>' +
       row("关于 WorkBuddy Remote", "about", "owl") +
       row("退出登录", "logout", "logout"),
-    300,
+    320,
   );
 }
 export function taskMenu(anchor, id) {
@@ -239,32 +240,65 @@ export function taskMenu(anchor, id) {
   if (!s) return;
   popover(
     anchor,
-    row("重命名", "rename", "edit", "", `data-session-id="${esc(id)}"`) +
-      row(s.isPinned ? "取消置顶" : "置顶", "pin", "pin", "", `data-session-id="${esc(id)}"`) +
-      row("归档", "archive", "archive", "", `data-session-id="${esc(id)}"`) +
+    row(s.isPinned ? "取消置顶" : "置顶", "pin", "pin", "", `data-session-id="${esc(id)}"`) +
+      row("重命名", "rename", "edit", "", `data-session-id="${esc(id)}"`) +
       `<div class="menu-separator"></div>` +
-      row("删除", "delete", "trash", "", `data-session-id="${esc(id)}" data-danger="true"`),
-    200,
+      row("归档", "archive", "archive", "", `data-session-id="${esc(id)}"`) +
+      row("删除任务", "delete", "trash", "", `data-session-id="${esc(id)}" data-danger="true"`),
+    170,
   );
 }
 export function searchDialog() {
   modal(
-    `<div class="search-box">${icon("search")}<input id="search-input" aria-label="搜索任务" placeholder="搜索任务" autocomplete="off"><button data-command="closeModal" aria-label="关闭搜索">${icon("close")}</button></div><div class="search-results"></div>`,
+    `<button class="window-close" data-command="closeModal" aria-label="关闭搜索">${icon("close")}</button>
+    <div class="search-box">${icon("search")}<input id="search-input" aria-label="搜索任务和空间" autocomplete="off"><button id="search-clear" hidden>清除</button></div>
+    <div class="search-tabs" role="tablist" aria-label="搜索类别">${["全部", "任务", "空间"].map((name, i) => `<button role="tab" aria-selected="${!i}" tabindex="${i ? -1 : 0}" data-search-tab="${name}">${name}</button>`).join("")}</div>
+    <div class="search-results" aria-live="polite"></div><footer class="search-help"><span>↑ ↓ 上下切换</span><span>↵ 打开</span><span>⌃ ⇥ 切换类别</span><span>ESC 关闭窗口</span></footer>`,
     "dialog search-dialog",
   );
+  const input = $("#search-input"), root = $(".search-results");
+  let tab = "全部";
   const render = () => {
-    const query = $("#search-input").value.toLowerCase();
-    $(".search-results").innerHTML =
-      taskRows(
-        projectedSessions().filter((x) =>
-          String(x.title ?? "")
-            .toLowerCase()
-            .includes(query),
-        ),
-      ) || '<div class="empty">没有匹配的任务</div>';
+    const query = input.value.trim().toLocaleLowerCase();
+    $("#search-clear").hidden = !input.value;
+    const tasks = projectedSessions().filter(x => !x.space || x.space.autoGenerated !== false).filter(x => String(x.title ?? "").toLocaleLowerCase().includes(query));
+    const spaces = state.workspaces.map((w, index) => ({w, index})).filter(({w}) => [workspaceName(w), workspacePath(w)].some(x => x.toLocaleLowerCase().includes(query)));
+    root.innerHTML = !query ? `<div class="search-empty">${icon("searchEmpty")}<p>输入关键字进行检索</p></div>` :
+      (tab !== "空间" && tasks.length ? `<h3>任务 (${tasks.length})</h3>${tasks.map(x => `<button class="search-result" data-session="${esc(x.id)}">${icon("chat")}<span><strong>${esc(x.title || "新任务")}</strong><small>任务</small></span><time>${esc(relativeDate(x.lastActivityAt ?? x.updatedAt))}</time></button>`).join("")}` : "") +
+      (tab !== "任务" && spaces.length ? `<h3>空间 (${spaces.length})</h3>${spaces.map(({w, index}) => `<button class="search-result" data-workspace-view="${index}">${icon("folder")}<span><strong>${esc(workspaceName(w))}</strong><small>${esc(workspacePath(w))}</small></span></button>`).join("")}` : "");
+    if (!root.innerHTML) root.innerHTML = `<div class="search-empty">${icon("searchEmpty")}<p>没有找到相关结果</p></div>`;
   };
-  $("#search-input").oninput = render;
-  render();
+  const selectTab = name => {
+    tab = name;
+    document.querySelectorAll("[data-search-tab]").forEach(button => {
+      const selected = button.dataset.searchTab === name;
+      button.setAttribute("aria-selected", String(selected)); button.tabIndex = selected ? 0 : -1;
+    });
+    render();
+  };
+  input.oninput = render;
+  $("#search-clear").onclick = () => { input.value = ""; render(); input.focus(); };
+  $(".search-tabs").onclick = event => { const button = event.target.closest("[data-search-tab]"); if (button) selectTab(button.dataset.searchTab); };
+  $(".search-dialog").addEventListener("keydown", event => {
+    if (event.isComposing) return;
+    const tabs = [...document.querySelectorAll("[data-search-tab]")];
+    if ((event.ctrlKey && event.key === "Tab") || (event.target.matches('[role="tab"]') && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))) {
+      event.preventDefault(); event.stopPropagation();
+      const direction = event.shiftKey || event.key === "ArrowLeft" ? -1 : 1;
+      const index = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (tabs.findIndex(b => b.dataset.searchTab === tab) + direction + tabs.length) % tabs.length;
+      selectTab(tabs[index].dataset.searchTab); tabs[index].focus(); return;
+    }
+    if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault(); event.stopPropagation();
+      const results = [...root.querySelectorAll("button")]; if (!results.length) return;
+      const current = results.indexOf(document.activeElement);
+      const index = current < 0 ? event.key === "ArrowDown" ? 0 : results.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length;
+      results[index].focus(); results[index].scrollIntoView?.({block: "nearest"});
+    } else if (event.key === "Enter" && event.target === input && root.querySelector("button")) {
+      event.preventDefault(); event.stopPropagation(); root.querySelector("button").click();
+    }
+  });
+  render(); input.focus();
 }
 export async function catalog(tab = "experts") {
   const labels = Object.fromEntries(
@@ -273,23 +307,27 @@ export async function catalog(tab = "experts") {
   if (!labels[tab]) tab = Object.keys(labels)[0];
   if (!tab) return;
   const gen = modal(
-    `<button class="dialog-close" data-command="closeModal" aria-label="关闭">${icon("close")}</button><h2>远端目录</h2><div class="catalog-tabs">${Object.entries(
+    `<header class="catalog-header"><div class="catalog-tabs">${Object.entries(
       labels,
     )
-      .map(([k, v]) => `<button data-catalog-tab="${k}" class="${tab === k ? "active" : ""}">${v}</button>`)
+      .map(([k, v]) => `<button data-catalog-tab="${k}" class="${tab === k ? "active" : ""}" aria-pressed="${tab === k}">${icon({experts: "owl", skills: "skill", connectors: "link"}[k])}${v}</button>`)
       .join(
         "",
-      )}</div><div class="catalog-grid"><div class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取远端${labels[tab]}…</div></div>`,
-    "dialog catalog-dialog",
+      )}
+        </div><div class="catalog-search">${icon("search")}<input id="catalog-search" aria-label="搜索${labels[tab]}" placeholder="搜索${labels[tab]}" autocomplete="off"></div><button class="dialog-close" data-command="closeModal" aria-label="关闭目录">${icon("close")}</button></header><div class="catalog-content"><h2>${tab === "skills" ? "已安装技能" : labels[tab]}</h2><div class="catalog-grid"><div class="empty"><span class="spinner" role="status" aria-label="加载中"></span> 正在读取远端${labels[tab]}…</div></div></div>`,
+    "dialog catalog-dialog catalog-page",
   );
   try {
     const method = { experts: "wb:experts:list", skills: "wb:skills:installed", connectors: "wb:connectors:list" }[tab];
     const items = listItems(await rpc(method, ...(tab === "skills" ? [{}] : [])));
     state.catalogs[tab] = items;
     if (gen !== modalGeneration) return;
-    $(".catalog-grid").innerHTML =
-      items
-        .map((item, index) => {
+    const render = () => {
+      const query = $("#catalog-search").value.trim().toLocaleLowerCase();
+      $(".catalog-grid").innerHTML =
+      items.map((item, index) => ({item, index}))
+        .filter(({item}) => [catalogName(item), catalogDescription(item)].some(value => value.toLocaleLowerCase().includes(query)))
+        .map(({item, index}) => {
           const selectable = tab === "experts" && Boolean(item.id ?? item.expertId);
           const tag = selectable ? "button" : "article";
           const attrs = selectable ? `data-catalog-item="${index}" data-catalog-type="experts"` : "";
@@ -298,118 +336,85 @@ export async function catalog(tab = "experts") {
             .join(" · ");
           return `<${tag} class="catalog-card" ${attrs}>
         ${/^https:|^data:image\//.test(item.icon ?? "") ? `<img class="catalog-icon" src="${esc(item.icon)}" alt="">` : icon({ experts: "owl", skills: "spark", connectors: "plug" }[tab])}
-        <strong>${esc(item.name ?? item.displayName ?? item.title ?? item.id ?? "未命名")}</strong>
-        ${item.description || item.summary ? `<p>${esc(item.description ?? item.summary)}</p>` : ""}
+        <strong>${esc(catalogName(item))}</strong>
+        ${catalogDescription(item) ? `<p>${esc(catalogDescription(item))}</p>` : ""}
         <small>${selectable ? "选择专家" : esc(metadata || "只读")}</small></${tag}>`;
         })
-        .join("") || `<div class="empty">远端暂无${labels[tab]}</div>`;
+        .join("") || `<div class="empty">${query ? "没有匹配的" + labels[tab] : "远端暂无" + labels[tab]}</div>`;
+    };
+    $("#catalog-search").oninput = render;
+    render();
   } catch (e) {
     if (gen === modalGeneration) $(".catalog-grid").innerHTML = `<div class="empty">${esc(e.message)}</div>`;
   }
 }
 function settingsSections() {
-  return {
-    客户端: ["通用", "外观", "快捷键"],
-    远端: [...(state.features.models ? ["模型"] : []), "设备连接"],
-  };
+  return { 设置: ["通用", "外观", "快捷键"], 功能: [...(state.features.models ? ["模型"] : []), "设备连接"] };
 }
 export function settings(section = "通用") {
   const sections = settingsSections();
   if (!Object.values(sections).flat().includes(section)) section = "通用";
   const reuse = !$("#modal-layer").hidden && !$("#modal-layer").inert && Boolean(document.querySelector(".settings"));
-  if (reuse) {
-    document.querySelector(".settings-body h2").textContent = section;
-    document
-      .querySelectorAll("[data-settings-section]")
-      .forEach((button) => button.classList.toggle("selected", button.dataset.settingsSection === section));
-  } else {
-    modal(
-      `<aside class="settings-nav"><input id="settings-search" aria-label="搜索设置项" placeholder="搜索设置项">${Object.entries(
-        sections,
-      )
-        .map(
-          ([g, items]) =>
-            `<div class="menu-title">${g}</div>${items.map((x) => `<button class="menu-row ${section === x ? "selected" : ""}" data-settings-section="${x}">${x}</button>`).join("")}`,
-        )
-        .join(
-          "",
-        )}</aside><div class="settings-body"><button class="dialog-close" data-command="closeModal" aria-label="关闭设置">${icon("close")}</button><h2>${section}</h2><div id="settings-content"></div></div>`,
-      "dialog settings",
-    );
+  if (!reuse) {
+    const icons = {通用: "settings", 外观: "palette", 快捷键: "keyboard", 模型: "cube", 设备连接: "device"};
+    modal(`<button class="window-close" data-command="closeModal" aria-label="关闭设置">${icon("close")}</button>
+      <aside class="settings-nav"><div class="settings-search">${icon("search")}<input id="settings-search" aria-label="搜索设置项" placeholder="搜索设置项" autocomplete="off"></div>
+      ${Object.entries(sections).map(([group, items]) => `<div class="settings-group"><div class="menu-title">${group}</div>${items.map(name => `<button class="menu-row" data-settings-section="${name}">${icon(icons[name])}<span>${name}</span></button>`).join("")}</div>`).join("")}
+      <div class="settings-no-results" hidden>没有匹配的设置项</div></aside><div class="settings-body"><h2 class="settings-heading"></h2><div id="settings-content"></div></div>`, "dialog settings");
+    $("#settings-search").oninput = () => {
+      const query = $("#settings-search").value.trim().toLocaleLowerCase();
+      let count = 0;
+      document.querySelectorAll(".settings-group").forEach(group => {
+        const buttons = [...group.querySelectorAll("[data-settings-section]")];
+        buttons.forEach(button => { button.hidden = !button.textContent.toLocaleLowerCase().includes(query); if (!button.hidden) count++; });
+        group.hidden = buttons.every(button => button.hidden);
+      });
+      $(".settings-no-results").hidden = Boolean(count);
+    };
+    $("#settings-search").focus();
   }
-  $("#settings-search").oninput = () => {
-    const q = $("#settings-search").value;
-    document.querySelectorAll("[data-settings-section]").forEach((b) => (b.hidden = !b.textContent.includes(q)));
-  };
-  const card = (html) => `<div class="setting-card">${html}</div>`;
-  const setting = (title, description, control = "") =>
-    `<div class="setting-row"><div><label>${title}</label>${description ? `<small>${description}</small>` : ""}</div>${control}</div>`;
+  document.querySelectorAll("[data-settings-section]").forEach(button => {
+    const selected = button.dataset.settingsSection === section;
+    button.classList.toggle("selected", selected); button.setAttribute("aria-current", selected ? "page" : "false");
+  });
+  const heading = $(".settings-heading");
+  heading.textContent = section === "通用" ? "常规" : "";
+  heading.hidden = section !== "通用";
+  $(".settings-body").scrollTop = 0;
+  const card = html => `<div class="setting-card">${html}</div>`;
+  const setting = (title, description, control = "") => `<div class="setting-row"><div><span class="setting-label">${title}</span>${description ? `<small>${description}</small>` : ""}</div>${control}</div>`;
   let html = "";
-  if (section === "外观")
-    html = card(
-      setting(
-        "主题",
-        "",
-        `<select id="theme-select" aria-label="主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>`,
-      ) +
-        setting(
-          "字体大小",
-          "",
-          `<input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 14}">`,
-        ),
-    );
-  else if (section === "设备连接")
-    html = card(
-      setting(
-        "当前设备",
-        esc(state.device?.displayName ?? "未连接"),
-        '<button class="button" data-command="deviceSettings">选择设备</button>',
-      ),
-    );
-  else if (section === "快捷键")
-    html = card(
-      [
-        ["搜索任务", "⌘ K"],
-        ["新建任务", "⌘ N"],
-        ["发送消息", "Enter / ⌘ Enter"],
-        ["输入换行", "Shift Enter"],
-        ["设置", "⌘ ,"],
-        ["关闭菜单或面板", "Esc"],
-      ]
-        .map(([a, b]) => setting(a, "", `<span class="key">${b}</span>`))
-        .join(""),
-    );
-  else if (section === "模型")
-    html = card(
-      setting(
-        "会话模型",
-        esc(state.config.model || "使用远端默认模型"),
-        '<button class="button" data-command="settingsModels">选择模型</button>',
-      ),
-    );
-  else if (section === "通用")
-    html = card(
-      setting("WorkBuddy Remote", "0.3.2") +
-        setting(
-          "连接状态",
-          state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接",
-          '<button class="button" data-command="deviceSettings">设备连接</button>',
-        ),
-    );
-  $("#settings-content").innerHTML = html;
-  if (reuse) enter($("#settings-content"), { distance: 4, duration: 180 });
-  if ($("#theme-select")) {
-    const select = $("#theme-select");
-    select.value = localStorage.getItem("theme") ?? "system";
-    select.onchange = () => {
-      localStorage.setItem("theme", select.value);
-      applyAppearance();
-    };
-    $("#font-size").oninput = (e) => {
-      localStorage.setItem("fontSize", e.target.value);
-      applyAppearance();
-    };
+  if (section === "外观") {
+    const selected = localStorage.getItem("theme") ?? "system";
+    html = `<div class="theme-preview" aria-hidden="true"><div class="preview-window"><aside><b>WorkBuddy</b><i></i><i></i><i></i></aside><main><b>WorkBuddy, 我帮你</b><div></div><i></i><i></i></main></div></div><h3 class="themes-heading">全部主题</h3><div class="theme-options" role="group" aria-label="主题">${[["light", "浅色"], ["dark", "深色"], ["system", "跟随系统"]].map(([value, label]) => `<button class="theme-option" data-theme-choice="${value}" aria-pressed="${selected === value}"><span class="theme-swatch ${value}" aria-hidden="true"><i></i><i></i><i></i></span><span>${label}</span></button>`).join("")}</div>`;
+  } else if (section === "快捷键") {
+    const shortcuts = [["打开全局搜索", "⌘ K"], ["打开设置", "⌘ ,"], ["发送消息", "Enter / ⌘ Enter"], ["输入时换行", "⇧ Enter"], ["新建对话", "⌘ N"], ["关闭菜单或面板", "Esc"]];
+    html = `<div class="shortcut-search">${icon("search")}<input id="shortcut-search" aria-label="搜索快捷键" placeholder="搜索快捷键"></div><table class="shortcut-table"><thead><tr><th>命令</th><th>按键绑定</th></tr></thead><tbody>${shortcuts.map(([name, keys]) => `<tr><td>${name}</td><td><kbd>${keys}</kbd></td></tr>`).join("")}</tbody></table><div class="shortcut-empty empty" hidden>没有匹配的快捷键</div>`;
+  } else if (section === "模型") {
+    const custom = state.models.filter(model => model.custom);
+    html = card(setting("自定义模型", "", '<button class="button" data-command="settingsModels">选择模型</button>') +
+      custom.map(model => `<div class="setting-model">${icon("cube")}<strong>${esc(modelName(model))}</strong><small>${esc(typeof model.vendor === "string" ? model.vendor : modelId(model))}</small></div>`).join("")) +
+      card(setting("会话模型", esc(state.config.model || "使用远端默认模型")));
+  } else if (section === "设备连接") {
+    html = card(setting("当前设备", esc(state.device?.displayName ?? "未连接"), '<button class="button" data-command="deviceSettings">选择设备</button>')) +
+      `<h3 class="settings-heading">在线设备</h3>` + card(state.devices.filter(device => device.onlineFlag).map(device => setting(esc(device.displayName ?? "未命名电脑"), device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "在线", `<button class="button" data-connect="${esc(device.deviceId)}" ${device.remoteViewFlag !== 1 ? "disabled" : ""}>${device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "连接"}</button>`)).join("") || '<div class="empty">暂无在线设备</div>');
+  } else {
+    html = card(setting("字体大小", "", `<div class="font-size-control"><input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 14}"><div><span>小</span><span>默认</span><span>大</span></div></div>`)) +
+      `<h3 class="settings-heading">关于</h3>` + card(setting("WorkBuddy Remote", "0.3.7") + setting("连接状态", state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接", '<button class="button" data-command="deviceSettings">设备连接</button>'));
   }
+  $("#settings-content").innerHTML = html;
+  $("#settings-content").onclick = event => {
+    const button = event.target.closest("[data-theme-choice]"); if (!button) return;
+    localStorage.setItem("theme", button.dataset.themeChoice);
+    document.querySelectorAll("[data-theme-choice]").forEach(choice => choice.setAttribute("aria-pressed", String(choice === button)));
+    applyAppearance();
+  };
+  if ($("#font-size")) $("#font-size").oninput = event => { localStorage.setItem("fontSize", event.target.value); applyAppearance(); };
+  if ($("#shortcut-search")) $("#shortcut-search").oninput = event => {
+    const rows = [...document.querySelectorAll(".shortcut-table tbody tr")];
+    rows.forEach(row => row.hidden = !row.textContent.toLocaleLowerCase().includes(event.target.value.trim().toLocaleLowerCase()));
+    $(".shortcut-empty").hidden = rows.some(row => !row.hidden);
+  };
 }
 export function applyAppearance() {
   const theme = localStorage.getItem("theme") ?? "system";

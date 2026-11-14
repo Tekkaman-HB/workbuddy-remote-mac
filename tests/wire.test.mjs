@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 node:test、node:assert 和 lib/wire.mjs。
- * [OUTPUT]: 提供远程会话密码协议的完整性与范围测试。
+ * [OUTPUT]: 验证密码协议完整性/范围及发布断流、超时、可信回包优先和无重发清理。
  * [POS]: tests 的独立通道测试入口。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -38,6 +38,49 @@ test('回包密钥只在已授权用户范围内解析', () => {
 test('断开状态的请求立即失败，不尝试发布', async () => {
   const client = new RemoteChannel({});
   await assert.rejects(client.request({type: 'wb:conversations:list'}), /CHANNEL_CLOSED/);
+});
+test('发布请求网络中断报告所在阶段，不重发任务并清理等待状态', async t => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {calls++;throw new TypeError('Load failed');});
+  const client = new RemoteChannel({userId: 'user',deviceId: 'client',targetDeviceId: 'mac',
+    credentials: {...credentials,apisixPublishUrl:'https://www.workbuddy.cn/test',publishToken:'test-only'}});
+  client.socket={readyState:WebSocket.OPEN,close(){}};
+  client.rpc=async()=>({});
+  await assert.rejects(client.request({type:'wb:conversations:sendPrompt'}), /PUBLISH_NETWORK_FAILED/);
+  assert.equal(calls,1);
+  assert.equal(client.listeners.size,0);
+  assert.equal(client.fragments.size,0);
+});
+test('发布已成功但响应体断流仍报告传输故障', async t => {
+  t.mock.method(globalThis, 'fetch', async () => ({ok:true,json:async()=>{throw new TypeError('Load failed');}}));
+  const client=new RemoteChannel({userId:'user',deviceId:'client',targetDeviceId:'mac',
+    credentials:{...credentials,apisixPublishUrl:'https://www.workbuddy.cn/test',publishToken:'test-only'}});
+  client.socket={readyState:WebSocket.OPEN,close(){}};client.rpc=async()=>({});
+  await assert.rejects(client.request({type:'wb:automations:listRecords'}), /PUBLISH_NETWORK_FAILED/);
+  assert.equal(client.listeners.size,0);
+});
+test('已收到可信回包时发布确认断流不制造失败或重发', async t => {
+  const client=new RemoteChannel({userId:'user',deviceId:'client',targetDeviceId:'mac',
+    credentials:{...credentials,apisixPublishUrl:'https://www.workbuddy.cn/test',publishToken:'test-only'}});
+  client.socket={readyState:WebSocket.OPEN,close(){}};client.rpc=async()=>({});
+  const reply={success:true,result:{items:[]}};
+  let sends=0;
+  t.mock.method(globalThis,'fetch',async()=>{
+    sends++;
+    [...client.listeners.values()][0].resolve(reply);
+    return {ok:true,json:async()=>{throw new TypeError('Load failed');}};
+  });
+  assert.deepEqual(await client.request({type:'wb:conversations:sendPrompt'}),reply);
+  assert.equal(sends,1);
+  assert.equal(client.listeners.size,0);
+});
+test('发布超时保留阶段标识且不留下回包监听', async t => {
+  t.mock.method(globalThis,'fetch',async()=>{throw new DOMException('timed out','TimeoutError');});
+  const client=new RemoteChannel({userId:'user',deviceId:'client',targetDeviceId:'mac',
+    credentials:{...credentials,apisixPublishUrl:'https://www.workbuddy.cn/test',publishToken:'test-only'}});
+  client.socket={readyState:WebSocket.OPEN,close(){}};client.rpc=async()=>({});
+  await assert.rejects(client.request({type:'wb:automations:listRecords'}),/PUBLISH_TIMEOUT/);
+  assert.equal(client.listeners.size,0);
 });
 test('等待回包期间断线立即结束请求，避免持续挂起', async t => {
   let published;
