@@ -11,7 +11,7 @@
 [![platform](https://img.shields.io/badge/platform-macOS%2013%2B-000000?logo=apple&logoColor=white)](#)
 [![swift](https://img.shields.io/badge/Swift-AppKit%20%C2%B7%20WebKit-F05138?logo=swift&logoColor=white)](MacApp/)
 [![node](https://img.shields.io/badge/Node.js-22%2B%20%E6%9E%84%E5%BB%BA-339933?logo=nodedotjs&logoColor=white)](package.json)
-[![version](https://img.shields.io/badge/version-0.3.7-blue)](#最近更新)
+[![version](https://img.shields.io/badge/version-0.3.9-blue)](#最近更新)
 [![tests](https://img.shields.io/badge/tests-29%20%E9%A1%B9%E9%80%9A%E8%BF%87-brightgreen)](tests/)
 
 </div>
@@ -118,6 +118,10 @@ zsh build.command   # 产出 dist/WorkBuddy Remote.app
 </details>
 
 ## 最近更新
+
+**0.3.9** —— 阅读成功后同步远端已读状态，修复普通会话和定时任务绿点不消失；同版本回执避免刷新回亮，新活动仍提示未读。
+
+**0.3.8** —— 修复模型列表异步加载后弹窗超出窗口的问题；内容和窗口尺寸变化时重新定位，空间不足向上展开并限高滚动。模型列表统一单行密度、自定义分组和右侧选中标记，保持无搜索框。
 
 **0.3.7** —— 点击附件直接获取并预览，移除重复确认框；执行记录中的附件横向排列，空间不足时自动换行。
 

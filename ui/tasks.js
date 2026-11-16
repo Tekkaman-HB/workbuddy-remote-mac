@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 远端会话、自动化定义及真实活动时间。
- * [OUTPUT]: 任务/空间分流、按自动化身份聚合的侧栏条目和中文时间/计划标签。
+ * [OUTPUT]: 同版本已读回执归一、任务/空间分流、按自动化身份聚合的侧栏条目和中文时间/计划标签。
  * [POS]: UI 的纯任务投影，state 与自动化历史视图共用；不按标题合并会话。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -137,4 +137,10 @@ export function projectTasks(sessions, definitions = []) {
       activity(b) - activity(a) ||
       a.id.localeCompare(b.id),
   );
+}
+
+// -- 已读回执只覆盖同一版活动，避免旧列表回包重新点亮或吞掉后续消息 --
+export const conversationRevision = item => JSON.stringify([item.lastActivityAt, item.updatedAt, item.state]);
+export function applyReadReceipts(sessions, receipts) {
+  return sessions.map(item => item.unread && receipts.get(item.id) === conversationRevision(item) ? {...item, unread: false} : item);
 }

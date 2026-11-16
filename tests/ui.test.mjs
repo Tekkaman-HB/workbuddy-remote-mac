@@ -120,7 +120,7 @@ const until = async (predicate) => {
 test("实际页面按接口裁剪入口，支持新建续聊并保留失败草稿", async () => {
   const calls = [];
   let rejectSend = false;
-  let supportAutomations = false;
+  let supportAutomations = false, rejectRead = false;
   let olderAvailable = false, deferOlder = false, releaseOlder, rejectOlder = false;
   let deferRefresh = false, releaseRefresh, automationPagination = false;
   let deferAutomation = false, releaseAutomation;
@@ -130,7 +130,7 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
   const automationRecords = Array.from({length: 11}, (_, i) => ({...automationRecord, id: i ? `auto-record-${i}` : automationRecord.id, startedAt: automationRecord.startedAt - i * 86400000}));
   let deferSend = false,
     releaseSend;
-  const sessions = [{ id: "existing", title: "测试任务", state: "completed", updatedAt: Date.now() }];
+  const sessions = [{ id: "existing", title: "测试任务", unread: true, state: "completed", updatedAt: Date.now() }];
   const records = [
     {
       id: "r1",
@@ -173,6 +173,10 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
             else if (method === "wb:skills:installed")
               value = { items: [{ id: "skill", name: "测试技能", description: "真实只读目录内容" }] };
             else if (method === "wb:artifacts:list") value = { items: [{ id: "artifact-report", title: "report.html", mimeType: "text/html" }] };
+            else if (method === "wb:conversations:markRead") {
+              if (rejectRead) value={errorCode:'TEST_READ_REJECTED',message:'已读失败'};
+              else { const session=sessions.find(x=>x.id===values[0]); if(session) session.unread=false; value=null; }
+            }
             else if (method === "wb:conversations:list") value = { items: sessions, total: sessions.length };
             else if (method === "wb:models:list")
               value = [
@@ -247,6 +251,9 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     assert.equal(document.querySelector('[data-command="connectors"]'), null);
     const panels = await import("../ui/panels.js");
     panels.closePopover({ immediate: true });
+    const modelAnchor = document.querySelector("#model-button"), modelPopover = document.querySelector("#popover");
+    modelAnchor.getBoundingClientRect = () => ({top:690,bottom:722,left:920,right:1100});
+    Object.defineProperty(modelPopover, 'scrollHeight', {configurable:true, get:()=>14 + modelPopover.querySelectorAll('button').length*36});
     document.querySelector("#model-button").click();
     await until(
       () =>
@@ -255,6 +262,11 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     );
     assert.ok(document.querySelector("#model-options").textContent.includes("自定义模型"));
     assert.equal(document.querySelector("#popover input"), null);
+    assert.equal(modelPopover.dataset.placement, 'above');
+    assert.ok(parseFloat(modelPopover.style.top) + modelPopover.scrollHeight <= 690);
+    assert.equal(modelPopover.getAttribute('aria-label'), '选择模型');
+    delete modelPopover.scrollHeight;
+    delete modelAnchor.getBoundingClientRect;
     document.querySelector('[data-model-id="custom:personal"]').click();
     await until(() => pageState.config.model === "custom:personal");
     assert.equal(document.querySelector("#model-button .control-label").textContent, "我的 GPT · 自定义");
@@ -354,6 +366,22 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     document.querySelector('[data-session="existing"]').click();
     await until(() => document.querySelector(".assistant-message strong")?.textContent === "测试回复");
     assert.match(document.querySelector(".permission").textContent, /允许完全访问/);
+    await until(() => calls.some(c => c.args?.method === 'wb:conversations:markRead' && c.args.values[0] === 'existing'));
+    await until(() => !document.querySelector('[data-session="existing"] .unread-dot'));
+    const readController = await import('../ui/controller.js');
+    sessions[0].unread=true;
+    await readController.loadSessions();
+    assert.equal(document.querySelector('[data-session="existing"] .unread-dot'),null);
+    sessions[0].updatedAt++;
+    await readController.loadSessions();
+    assert.ok(document.querySelector('[data-session="existing"] .unread-dot'));
+    rejectRead=true;
+    await readController.openSession('existing');
+    assert.ok(document.querySelector('[data-session="existing"] .unread-dot'));
+    rejectRead=false;
+    await readController.openSession('existing');
+    assert.equal(document.querySelector('[data-session="existing"] .unread-dot'),null);
+
     document.querySelector('[data-artifact-name="report.html"]').click();
     await until(() => calls.some(c => c.action === "artifactOpen"));
     assert.deepEqual(calls.find(c => c.action === "artifactOpen").args, {conversationId: "existing", artifactId: "artifact-report"});
@@ -469,14 +497,18 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     await until(() => !state.sending);
     assert.equal(input.value, "确认期间继续输入的新草稿");
     supportAutomations = true;
-    sessions.push({id: "auto-session", title: "每日测试", isBackgroundAutomation: true, tags: {automationId: "daily"}, lastActivityAt: Date.now()});
-    sessions.push({id: "auto-older", title: "每日测试", isBackgroundAutomation: true, tags: {automationId: "daily"}, lastActivityAt: Date.now() - 86400000});
+    sessions.push({id: "auto-session", unread: true, title: "每日测试", isBackgroundAutomation: true, tags: {automationId: "daily"}, lastActivityAt: Date.now()});
+    sessions.push({id: "auto-older", unread: true, title: "每日测试", isBackgroundAutomation: true, tags: {automationId: "daily"}, lastActivityAt: Date.now() - 86400000});
     pageState.features.automations = true;
     await loadSessions();
     assert.equal(document.querySelectorAll('[data-session="automation:daily"]').length, 1);
     assert.equal(document.querySelector('[data-session="auto-older"]'), null);
     document.querySelector('[data-session="automation:daily"]').click();
     await until(() => document.querySelector(".automation-run strong")?.textContent === "执行结果");
+    await until(() => calls.some(c => c.args?.method === 'wb:conversations:markRead' && c.args.values[0] === 'auto-older'));
+    await until(() => !document.querySelector('[data-session="automation:daily"] .unread-dot'));
+    await loadSessions();
+    assert.equal(document.querySelector('[data-session="automation:daily"] .unread-dot'),null);
     assert.equal(document.querySelector("#composer-wrap").hidden, true);
     assert.equal(document.querySelector("#conversation-schedule").textContent, "每天 07:30");
     const expand = document.querySelector('[data-action="expandAutomationRecord"]');

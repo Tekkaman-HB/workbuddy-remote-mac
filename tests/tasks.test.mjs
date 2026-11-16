@@ -7,7 +7,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { state, visibleSessions, relativeDate } from "../ui/state.js";
-import { projectTasks } from "../ui/tasks.js";
+import { conversationRevision, applyReadReceipts, projectTasks } from "../ui/tasks.js";
 
 test("定时任务按身份聚合执行记录，同名普通会话保持独立", () => {
   Object.assign(state, {
@@ -97,4 +97,13 @@ test("归档、助理和独立空间不混入任务区，空间里的自动化�
     "/test/work",
   );
   assert.equal(rows.length, 3);
+});
+
+test("已读回执挡住旧未读回包，新活动恢复绿点且不修改输入", () => {
+  const item={id:'chat', unread:true, lastActivityAt:1000, updatedAt:1000, state:'completed'};
+  const receipts=new Map([['chat',conversationRevision(item)]]);
+  assert.equal(applyReadReceipts([item],receipts)[0].unread,false);
+  assert.equal(item.unread,true);
+  assert.equal(applyReadReceipts([{...item,lastActivityAt:2000}],receipts)[0].unread,true);
+  assert.equal(applyReadReceipts([{...item,id:'other'}],receipts)[0].unread,true);
 });

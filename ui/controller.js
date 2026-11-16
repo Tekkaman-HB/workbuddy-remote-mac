@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖原生请求桥、共享状态、catalog 模型合并和视图更新函数。
- * [OUTPUT]: 设备连接、单飞历史分页及最多三路执行详情读取、失败保留记录/恢复清除提示、产物/模型/草稿协调。
+ * [OUTPUT]: 阅读成功后的远端已读同步、设备连接、单飞历史分页及最多三路执行详情读取、失败保留记录/恢复清除提示、产物/模型/草稿协调。
  * [POS]: UI 的远端会话控制器；发送失败保留草稿且不自动重发。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -17,11 +17,13 @@ import {
 } from "./view.js";
 import * as panels from "./panels.js";
 import { mergeModels } from "./catalog.js";
+import { conversationRevision, applyReadReceipts } from "./tasks.js";
 import { runConversation } from "./automations.js";
 import { matchArtifacts } from "./artifacts.js";
 import { renderHistoryEdge } from "./history-scroll.js";
 const drafts = new Map();
 const automationDetails = new Map();
+const readReceipts = new Map(), pendingReads = new Set(), readRetryAfter = new Map();
 const AUTOMATION_DETAIL_CONCURRENCY = 3;
 let lastAutomationRefresh = 0;
 let pendingOlderEpoch = null;
@@ -101,6 +103,7 @@ export async function connect(id) {
   state.session = null;
   state.automation = null;
   automationDetails.clear();
+  readReceipts.clear(); readRetryAfter.clear();
   state.records = [];
   state.sessions = [];
   state.workspaces = [];
@@ -178,11 +181,11 @@ export async function loadSessions(epoch = state.epoch) {
     if (epoch !== state.epoch) return;
     const definitions = state.features.automations ? listItems(await rpc("wb:automations:list", {})) : null;
     if (epoch !== state.epoch) return;
-    state.sessions = sessions;
+    state.sessions = applyReadReceipts(sessions, readReceipts);
     if (definitions) state.catalogs.automations = definitions;
     lastListRefresh = Date.now();
     if (state.session) {
-      const current = sessions.find((x) => x.id === state.session.id);
+      const current = state.sessions.find((x) => x.id === state.session.id);
       if (current) state.session = { ...state.session, ...current };
     }
     updateTitle();
@@ -272,12 +275,43 @@ export async function openSession(id) {
     }
   }
 }
+async function acknowledgeRead(items, epoch, notify = false) {
+  let failed = false, changed = false;
+  const unread = items.filter(item => item.unread);
+  if (!unread.length) return;
+  for (let offset = 0; offset < unread.length && epoch === state.epoch; offset += 3) {
+    await Promise.all(unread.slice(offset, offset + 3).map(async item => {
+    const revision = conversationRevision(item), key = JSON.stringify([epoch, item.id, revision]);
+    if (pendingReads.has(key) || !notify && (readRetryAfter.get(key) ?? 0) > Date.now()) return;
+    pendingReads.add(key);
+    try {
+      await rpc("markRead", item.id);
+      if (epoch !== state.epoch) return;
+      const current = state.sessions.find(session => session.id === item.id);
+      if (!current || conversationRevision(current) !== revision) return;
+      readReceipts.set(item.id, revision);
+      changed = true;
+      readRetryAfter.delete(key);
+      state.sessions = applyReadReceipts(state.sessions, readReceipts);
+      if (state.session?.id === item.id && conversationRevision(state.session) === revision)
+        state.session = {...state.session, unread: false};
+    } catch {
+      if (epoch === state.epoch) {failed = true; readRetryAfter.set(key, Date.now() + 30000);}
+    } finally {pendingReads.delete(key);}
+    }));
+  }
+  if (epoch !== state.epoch) return;
+  if (changed) renderSidebar();
+  if (failed && notify) toast("内容已读取，已读状态同步失败，请稍后重新打开任务重试");
+}
+
 export async function loadHistory(older = false, force = false, expected = state.historyEpoch) {
   if (older && !state.hasOlder) return;
   if (state.automation) return loadAutomationHistory(older, force);
   const id = state.session?.id,
     epoch = state.epoch;
   if (!id || (!force && historyBusy) || !state.connected) return;
+  const readSnapshot = state.sessions.filter(item => item.id === id).map(item => ({...item}));
   historyBusy = true;
   state.loadingOlder = older;
   if (older) { state.olderError = null; renderHistoryEdge(); }
@@ -293,6 +327,8 @@ export async function loadHistory(older = false, force = false, expected = state
     state.loading = false;
     clearHistoryError();
     renderMessages(force && !older);
+    if (!older && (force || document.visibilityState === "visible" && document.hasFocus()))
+      await acknowledgeRead(readSnapshot, epoch, force);
   } catch (e) {
     if (expected === state.historyEpoch) {
       if (older) { state.olderError = e.message; return; }
@@ -467,6 +503,7 @@ async function openAutomation(task) {
 async function loadAutomationHistory(older = false, force = false) {
   const task = state.automation, epoch = state.epoch, historyEpoch = state.historyEpoch;
   if (!task || historyBusy || !force && !older && Date.now() - lastAutomationRefresh < 10000) return;
+  const readSnapshot = state.sessions.filter(item => item.isBackgroundAutomation && item.tags?.automationId === task.automationId).map(item => ({...item}));
   historyBusy = true;
   state.loadingOlder = older;
   if (older) { state.olderError = null; renderHistoryEdge(); }
@@ -505,6 +542,9 @@ async function loadAutomationHistory(older = false, force = false) {
     lastAutomationRefresh = Date.now();
     clearHistoryError();
     updateTitle(); renderMessages(force && !older);
+    if (records.length && !results.some(record => record.detailError) && !older &&
+        (force || document.visibilityState === "visible" && document.hasFocus()))
+      await acknowledgeRead(readSnapshot, epoch, force);
   } catch (error) {
     if (historyEpoch === state.historyEpoch) {
       if (older) state.olderError = error.message;

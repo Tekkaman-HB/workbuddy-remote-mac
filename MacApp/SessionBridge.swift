@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WebKit 的独立浏览器会话和 lib/wire.mjs。
- * [OUTPUT]: 提供登录/设备、网络阶段错误、单飞连接检查与只读瞬断单次恢复、受限调用和模型展示字段及点击附件后的产物定位。
+ * [OUTPUT]: 提供登录/设备、网络阶段错误、单飞连接检查与只读瞬断单次恢复、已读回执、受限调用和模型展示字段及点击附件后的产物定位。
  * [POS]: MacApp 的账号与协议边界，被原生入口和本地页面桥使用。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -144,7 +144,7 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
     func invoke(_ method: String, _ args: [Any], allowArtifactTransfer: Bool = false) async throws -> [String: Any] {
         guard !targetID.isEmpty else {throw RemoteFailure.message("请先连接目标 Mac")}
         let requestedTarget = targetID
-        let conversations = ["list", "get", "requests", "sendPrompt", "cancel",
+        let conversations = ["list", "get", "requests", "markRead", "sendPrompt", "cancel",
             "create", "rename", "pin", "unpin", "archive", "delete", "configSetModel", "configSetMode", "configSetExpert",
             "configSetPermissionMode"]
         let catalogs = ["wb:models:list", "wb:models:customs", "wb:experts:list", "wb:skills:installed", "wb:connectors:list",

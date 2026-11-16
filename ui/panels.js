@@ -1,10 +1,11 @@
 /**
  * [INPUT]: 依赖共享 state、受限 rpc、catalog 多语言名称/路径/模型归一、视图和图标。
- * [OUTPUT]: 在线设备/模型/空间菜单、分组任务/空间搜索、原版设置排版与主题卡片、原生主题同步、文件列表及指定执行会话的产物预览入口。
+ * [OUTPUT]: 在线设备/模型/空间菜单、分组任务/空间搜索、受视口约束的异步模型菜单、原版设置排版与主题卡片、原生主题同步、文件列表及指定执行会话的产物预览入口。
  * [POS]: UI 的次级交互，实际会话变更交给 app.js。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions, relativeDate } from "./state.js";
+import { popoverBounds } from "./popover-position.js";
 import { matchArtifacts } from "./artifacts.js";
 import { icon } from "./icons.js";
 import { toast, updateComposer } from "./view.js";
@@ -15,15 +16,30 @@ export const action = (type, data = {}) =>
 let anchorElement = null,
   previousFocus = null,
   modalGeneration = 0;
+let popoverWidth = 240, popoverObserver;
+export function positionPopover() {
+  const p = $("#popover");
+  if (!anchorElement || p.hidden) return;
+  if (!anchorElement.isConnected) {closePopover({ immediate: true }); return;}
+  const viewport = window.visualViewport;
+  const bounds = popoverBounds(anchorElement.getBoundingClientRect(), p.scrollHeight + 2,
+    {width: viewport?.width ?? innerWidth, height: viewport?.height ?? innerHeight},
+    popoverWidth, p.dataset.kind === "models" ? 440 : 360);
+  Object.assign(p.style, {width: bounds.width + "px", maxHeight: bounds.maxHeight + "px", left: bounds.left + "px", top: bounds.top + "px"});
+  p.dataset.placement = bounds.placement;
+}
+window.addEventListener("resize", positionPopover);
+window.visualViewport?.addEventListener("resize", positionPopover);
 export function closePopover({ immediate = false, restoreFocus = true } = {}) {
   const p = $("#popover");
   const previous = anchorElement;
+  popoverObserver?.disconnect();
   dismiss(p, { immediate, onHidden: () => p.replaceChildren() });
   previous?.setAttribute("aria-expanded", "false");
   if (restoreFocus && previous?.isConnected) previous.focus({ preventScroll: true });
   anchorElement = null;
 }
-export function popover(anchor, html, width = 240) {
+export function popover(anchor, html, width = 240, kind = "menu") {
   if (anchorElement === anchor && !$("#popover").hidden) {
     closePopover();
     return;
@@ -31,15 +47,18 @@ export function popover(anchor, html, width = 240) {
   closePopover({ immediate: true, restoreFocus: false });
   anchorElement = anchor;
   const p = $("#popover");
-  p.style.width = width + "px";
+  popoverWidth = width;
+  p.dataset.kind = kind;
+  p.style.width = Math.min(width, innerWidth - 24) + "px";
+  p.style.maxHeight = "";
   p.innerHTML = html;
   p.hidden = false;
-  const rect = anchor.getBoundingClientRect();
-  const height = p.offsetHeight;
-  p.style.left = Math.min(Math.max(10, rect.left), innerWidth - width - 10) + "px";
-  const above = rect.bottom + height + 12 > innerHeight;
-  p.dataset.placement = above ? "above" : "below";
-  p.style.top = (above ? Math.max(10, rect.top - height - 8) : rect.bottom + 8) + "px";
+  positionPopover();
+  if (window.ResizeObserver) {
+    popoverObserver = new window.ResizeObserver(positionPopover);
+    popoverObserver.observe(p);
+    popoverObserver.observe(anchor);
+  }
   p.setAttribute("role", "dialog");
   p.setAttribute("aria-label", p.querySelector(".menu-title")?.textContent ?? "操作菜单");
   anchor.setAttribute("aria-expanded", "true");
@@ -107,7 +126,8 @@ export function modelMenu(anchor) {
     closePopover();
     return;
   }
-  popover(anchor, '<div id="model-options"></div>', 340);
+  popover(anchor, '<div id="model-options"></div>', 340, 'models');
+  $("#popover").setAttribute("aria-label", "选择模型");
   const root = $("#model-options"),
     epoch = state.epoch;
   const render = () => {
@@ -123,19 +143,22 @@ export function modelMenu(anchor) {
             group
               .map(
                 ({ m, index }) =>
-                  `<button class="menu-row model-option" data-command="chooseModel" data-model-id="${esc(modelId(m))}" data-index="${index}" title="${esc(m.disabled ? m.disabledReason || "模型不可用" : modelId(m))}" ${m.disabled ? "disabled" : ""}>${icon(custom ? "plug" : "spark")}<span class="name">${esc(modelName(m))}</span>${modelId(m) === state.config.model ? icon("check", "check") : ""}</button>`,
+                  `<button class="menu-row model-option ${modelId(m) === state.config.model ? "selected" : ""}" aria-pressed="${modelId(m) === state.config.model}" data-command="chooseModel" data-model-id="${esc(modelId(m))}" data-index="${index}" title="${esc(m.disabled ? m.disabledReason || "模型不可用" : modelId(m))}" ${m.disabled ? "disabled" : ""}>${icon(custom ? "plug" : "spark")}<span class="name">${esc(modelName(m))}</span>${modelId(m) === state.config.model ? icon("check", "check") : ""}</button>`,
               )
               .join("")
           );
         })
         .join("") || '<div class="empty">暂无可用模型</div>';
+    positionPopover();
     if (focusedId)
       [...root.querySelectorAll("[data-model-id]")]
         .find((b) => b.dataset.modelId === focusedId)
         ?.focus({ preventScroll: true });
   };
   render();
-  (root.querySelector('.model-option:has(.check)') ?? root.querySelector("button:not(:disabled)"))?.focus({ preventScroll: true });
+  const chosen = root.querySelector('.model-option:has(.check)') ?? root.querySelector("button:not(:disabled)");
+  chosen?.focus({ preventScroll: true });
+  if (chosen) $("#popover").scrollTop = Math.max(0, chosen.offsetTop + chosen.offsetHeight - $("#popover").clientHeight + 6);
   const refresh = async () => {
     root.setAttribute("aria-busy", "true");
     const results = await Promise.allSettled([rpc("wb:models:list"), rpc("wb:models:customs")]);
@@ -151,6 +174,7 @@ export function modelMenu(anchor) {
     if (results.some((r) => r.status === "rejected" || !isListResult(r.value))) {
       root.insertAdjacentHTML("afterbegin", '<button class="menu-row" data-model-retry>模型刷新失败，重试</button>');
       root.querySelector("[data-model-retry]").onclick = refresh;
+      positionPopover();
     }
   };
   void refresh();
@@ -400,7 +424,7 @@ export function settings(section = "通用") {
       `<h3 class="settings-heading">在线设备</h3>` + card(state.devices.filter(device => device.onlineFlag).map(device => setting(esc(device.displayName ?? "未命名电脑"), device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "在线", `<button class="button" data-connect="${esc(device.deviceId)}" ${device.remoteViewFlag !== 1 ? "disabled" : ""}>${device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "连接"}</button>`)).join("") || '<div class="empty">暂无在线设备</div>');
   } else {
     html = card(setting("字体大小", "", `<div class="font-size-control"><input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 14}"><div><span>小</span><span>默认</span><span>大</span></div></div>`)) +
-      `<h3 class="settings-heading">关于</h3>` + card(setting("WorkBuddy Remote", "0.3.7") + setting("连接状态", state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接", '<button class="button" data-command="deviceSettings">设备连接</button>'));
+      `<h3 class="settings-heading">关于</h3>` + card(setting("WorkBuddy Remote", "0.3.9") + setting("连接状态", state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接", '<button class="button" data-command="deviceSettings">设备连接</button>'));
   }
   $("#settings-content").innerHTML = html;
   $("#settings-content").onclick = event => {

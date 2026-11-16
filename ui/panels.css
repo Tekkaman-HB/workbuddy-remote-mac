@@ -1,13 +1,13 @@
 /*
  * [INPUT]: 依赖 styles.css 的主题令牌与本地页面 DOM。
- * [OUTPUT]: 搜索/设置窗口、关闭图标尺寸隔离、主题卡片与目录/文件面板样式。
+ * [OUTPUT]: 搜索/设置窗口、关闭图标尺寸隔离、主题卡片、紧凑模型列表与目录/文件面板样式。
  * [POS]: UI 的局部视觉定义，由 index.html 顺序加载。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 #popover {
   position: fixed;
   z-index: 20;
-  min-width: 200px;
+  min-width: 0;
   max-width: 360px;
   max-height: min(360px, calc(100vh - 40px));
   overflow: auto;
@@ -612,3 +612,23 @@ body.wb-polished .catalog-search input:focus { border: 0; box-shadow: none; }
   .preview-window aside { width: 64px; }
   .theme-swatch { height: 60px; }
 }
+
+/* -- 模型菜单：原版单行密度、分组与右侧选中标记 -- */
+#popover[data-kind="models"] { padding: 6px; overscroll-behavior: contain; scrollbar-width: thin; }
+#popover[data-kind="models"] .model-option {
+  display: grid; grid-template-columns: 20px minmax(0,1fr) 18px;
+  min-height: 36px; padding: 8px 10px; gap: 10px;
+  font-size: 14px; font-weight: 400; line-height: 20px; border-radius: 7px;
+}
+#popover[data-kind="models"] .model-option .name { white-space: nowrap; }
+#popover[data-kind="models"] .model-option > .icon { width: 18px; height: 18px; }
+body.wb-polished #popover[data-kind="models"] .model-option > .check { grid-column: 3; color: var(--teal); width: 16px; height: 16px; }
+#popover[data-kind="models"] .model-option.selected { background: var(--hover); }
+#popover[data-kind="models"] .model-option:hover:not(:disabled) { background: var(--selected); }
+#popover[data-kind="models"] .model-option:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+#popover[data-kind="models"] .model-option:disabled { opacity: .45; cursor: default; }
+#popover[data-kind="models"] .menu-title {
+  margin: 6px 6px 0; padding: 12px 4px 6px;
+  border-top: 1px solid var(--border); font-size: 12px; line-height: 18px;
+}
+#popover[data-kind="models"] .menu-title:first-child { border-top: 0; margin-top: 0; padding-top: 6px; }
