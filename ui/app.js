@@ -1,10 +1,10 @@
 /**
  * [INPUT]: 依赖原生桥、共享状态、transcript 正文分层、主视图及次级面板。
- * [OUTPUT]: 页面初始化、主区/目录顶部拖动、历史自动加载、自动化/文件路由、搜索和浮层焦点交互。
+ * [OUTPUT]: 登录/退出/账号状态事件、页面初始化、主区/目录顶部拖动、历史自动加载、自动化/文件路由、搜索和浮层焦点交互。
  * [POS]: UI 入口，将用户动作路由到 controller 和 panels。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, textOf, escapeHTML as esc, projectedSessions } from "./state.js";
+import { state, $, native, textOf, escapeHTML as esc, projectedSessions, resetAccount } from "./state.js";
 import { paintIcons, icon } from "./icons.js";
 import { renderPage, renderSidebar, renderMessages, resetHistory, updateComposer, toast, banner } from "./view.js";
 import { replyParts } from "./transcript.js";
@@ -171,7 +171,7 @@ async function command(type, data = {}, anchor) {
     case "about":
       information(
         "WorkBuddy Remote",
-        "0.3.7 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
+        "0.3.10 · Mac 本地任务远程客户端。界面对照本机 WorkBuddy 5.9.3 实现；任务在所连接的 Mac 上执行，控制端不需要安装 WorkBuddy。",
       );
       break;
     case "logout":
@@ -180,25 +180,7 @@ async function command(type, data = {}, anchor) {
           ++state.epoch;
           ++state.historyEpoch;
           await native("logout");
-          Object.assign(state, {
-            connected: false,
-            device: null,
-            devices: [],
-            sessions: [],
-            models: [],
-            workspaces: [],
-            profile: {},
-            features: {},
-            catalogs: {},
-            draftConfig: {},
-            config: {},
-            records: [],
-            session: null,
-            sending: false,
-            connecting: false,
-            loading: false,
-            view: "home",
-          });
+          resetAccount();
           setDraft("");
           resetHistory();
           renderPage();
@@ -426,7 +408,13 @@ window.nativeEvent = ({ type, data }) => {
     }
   }
   if (type === "authReady" && !state.connected) safe(() => discover(true));
+  if (type === "authState") {
+    if (data.status === "signedOut") {resetAccount(); resetHistory(); renderPage(); banner("请登录 WorkBuddy 账号");}
+    else if (data.status === "signedIn") {state.authStatus = "signedIn"; state.profile = data.profile ?? {}; renderSidebar();}
+    panels.refreshAuthMenu();
+  }
   if (type === "signedIn") {
+    state.authStatus = "signedIn";
     state.devices = data.items;
     state.profile = data.profile;
     renderSidebar();

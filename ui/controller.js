@@ -1,10 +1,10 @@
 /**
  * [INPUT]: 依赖原生请求桥、共享状态、catalog 模型合并和视图更新函数。
- * [OUTPUT]: 阅读成功后的远端已读同步、设备连接、单飞历史分页及最多三路执行详情读取、失败保留记录/恢复清除提示、产物/模型/草稿协调。
+ * [OUTPUT]: 账号认证/设备发现状态区分、阅读成功后的远端已读同步、设备连接、单飞历史分页及最多三路执行详情读取、失败保留记录/恢复清除提示、产物/模型/草稿协调。
  * [POS]: UI 的远端会话控制器；发送失败保留草稿且不自动重发。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, rpc, listItems, isListResult, mergeRecords, projectedSessions } from "./state.js";
+import { state, $, native, rpc, listItems, isListResult, mergeRecords, projectedSessions, resetAccount } from "./state.js";
 import {
   renderPage,
   renderSidebar,
@@ -69,11 +69,15 @@ export function requireConnection() {
 export async function discover(auto = false) {
   if (discoveryBusy) return;
   discoveryBusy = true;
+  const epoch = state.epoch;
   try {
     const data = await native("devices");
+    if (epoch !== state.epoch) return;
     state.devices = data.items ?? [];
     state.profile = data.profile ?? {};
+    state.authStatus = "signedIn";
     renderSidebar();
+    panels.refreshAuthMenu();
     if (auto && !state.connected && !state.connecting) {
       const preferred = state.devices.find((x) => x.deviceId === state.preferredDevice && x.onlineFlag);
       if (preferred) await connect(preferred.deviceId);
@@ -84,8 +88,18 @@ export async function discover(auto = false) {
     }
     return data;
   } catch (e) {
-    banner("登录 WorkBuddy 账号，然后连接远端 Mac");
-    if (!auto) throw e;
+    if (epoch !== state.epoch) return;
+    const auth = await native("authStatus").catch(() => null);
+    if (epoch !== state.epoch) return;
+    if (auth?.status === "signedOut") {
+      resetAccount(); resetHistory(); renderPage();
+    } else if (auth?.status === "signedIn") {
+      state.authStatus = "signedIn"; state.profile = auth.profile ?? {};
+      renderSidebar();
+    }
+    panels.refreshAuthMenu();
+    banner(state.authStatus === "signedOut" ? "请登录 WorkBuddy 账号" : e.message);
+    if (!auto && state.authStatus !== "signedOut") throw e;
   } finally {
     discoveryBusy = false;
   }

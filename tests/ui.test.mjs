@@ -120,7 +120,7 @@ const until = async (predicate) => {
 test("实际页面按接口裁剪入口，支持新建续聊并保留失败草稿", async () => {
   const calls = [];
   let rejectSend = false;
-  let supportAutomations = false, rejectRead = false;
+  let supportAutomations = false, rejectRead = false, failDevices = false, nativeAuth = "signedIn";
   let olderAvailable = false, deferOlder = false, releaseOlder, rejectOlder = false;
   let deferRefresh = false, releaseRefresh, automationPagination = false;
   let deferAutomation = false, releaseAutomation;
@@ -150,6 +150,9 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
       native: {
         postMessage(message) {
           calls.push(message);
+          if (message.action === 'devices' && failDevices) {
+            queueMicrotask(() => window.nativeReply({id:message.id,error:'API_NETWORK_FAILED'})); return;
+          }
           let value;
           if (message.action === "ready") value = { preferredDevice: "host" };
           else if (message.action === "devices")
@@ -157,6 +160,7 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
               items: [{ deviceId: "host", displayName: "测试 Mac", onlineFlag: true, remoteViewFlag: 1 }],
               profile: { nickname: "测试用户" },
             };
+          else if (message.action === "authStatus") value = {status:nativeAuth,profile:nativeAuth === "signedIn" ? {nickname:"已登录测试用户"} : {}};
           else if (message.action === "appearance") value = {theme: message.args.preference === "system" ? "dark" : message.args.theme};
           else if (message.action === "connect") value = { deviceId: "host" };
           else if (message.action === "rpc") {
@@ -572,6 +576,39 @@ test("实际页面按接口裁剪入口，支持新建续聊并保留失败草�
     await until(() => pageState.records.length && !pageState.historyError);
     assert.equal(document.querySelector('#connection-banner').hidden, true);
     assert.ok(calls.filter((c) => c.action === "rpc").every((c) => !c.args.method.includes("cloud")));
+    // 未登录菜单直接登录；已登录无设备不应误判；网络错误不等于退出。
+    const {resetAccount} = await import('../ui/state.js');
+    resetAccount();
+    const {renderPage} = await import('../ui/view.js'); renderPage();
+    const account = document.querySelector('.account-main');
+    panels.accountMenu(account);
+    assert.equal(document.querySelector('[data-command="logout"]'),null);
+    assert.ok(document.querySelector('#popover').textContent.includes('尚未登录'));
+    assert.equal(document.querySelector('#profile-name').textContent,'登录 WorkBuddy');
+    const loginBefore=calls.filter(c=>c.action==='login').length;
+    document.querySelector('[data-command="login"]').click();
+    await until(()=>calls.filter(c=>c.action==='login').length===loginBefore+1);
+    assert.equal(pageState.authStatus,'signedOut');
+    window.nativeEvent({type:'signedIn',data:{items:[],profile:{nickname:'已登录测试用户'}}});
+    panels.closePopover({immediate:true}); panels.accountMenu(account);
+    assert.ok(document.querySelector('[data-command="logout"]'));
+    assert.equal(document.querySelector('[data-command="login"]'),null);
+    assert.ok(document.querySelector('#popover').textContent.includes('已登录，尚未连接'));
+    panels.closePopover({immediate:true}); panels.deviceMenu(document.querySelector('#device-button'));
+    assert.ok(document.querySelector('#popover').textContent.includes('暂无在线设备'));
+    const {discover} = await import('../ui/controller.js');
+    failDevices=true;
+    await discover(true);
+    assert.equal(pageState.authStatus,'signedIn');
+    nativeAuth='signedOut';
+    await discover(true);
+    assert.equal(pageState.authStatus,'signedOut');
+    assert.equal(pageState.connected,false);
+    assert.equal(pageState.sessions.length,0);
+    panels.closePopover({immediate:true}); panels.accountMenu(account);
+    assert.ok(document.querySelector('[data-command="login"]'));
+    assert.equal(document.querySelector('[data-command="logout"]'),null);
+
   } finally {
     intervals.forEach(clearInterval);
     globalThis.setInterval = originalInterval;

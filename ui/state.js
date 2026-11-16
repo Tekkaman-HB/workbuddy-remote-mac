@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WebKit native 消息处理器与 tasks 的纯任务投影。
- * [OUTPUT]: Promise 桥、按网络阶段归一的错误文案、历史加载/失败共享状态、身份聚合任务与数据归一函数。
+ * [OUTPUT]: 账号认证状态/重置/显示名称、Promise 桥、按网络阶段归一的错误文案、历史加载/失败共享状态、身份聚合任务与数据归一函数。
  * [POS]: UI 的数据边界，不持有账号凭证。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -9,6 +9,7 @@ export { relativeDate } from "./tasks.js";
 export const state = {
   devices: [],
   profile: {},
+  authStatus: "unknown",
   device: null,
   sessions: [],
   workspaces: [],
@@ -43,6 +44,7 @@ const pending = new Map();
 export function remoteErrorMessage(value) {
   const text = String(value ?? "请求失败");
   const messages = {
+    AUTH_REQUIRED: "请在官方页面完成账号登录和账号选择",
     PUBLISH_NETWORK_FAILED: "发送请求时网络连接中断，请稍后重试",
     PUBLISH_TIMEOUT: "发送请求超时，请先刷新确认任务状态",
     PUBLISH_INVALID_RESPONSE: "通道服务返回格式异常，请稍后重试",
@@ -160,4 +162,22 @@ export function visibleSessions() {
 }
 export function projectedSessions() {
   return projectTasks(state.sessions, state.features.automations ? state.catalogs.automations ?? [] : []);
+}
+
+// -- 账号状态独立于设备连接；不根据占位用户名或设备在线状态推断登录 --
+export function accountName() {
+  return state.authStatus === "signedIn"
+    ? state.profile.nickname ?? state.profile.displayName ?? state.profile.name ?? "WorkBuddy 用户"
+    : "登录 WorkBuddy";
+}
+export function resetAccount() {
+  ++state.epoch; ++state.historyEpoch;
+  Object.assign(state, {
+    authStatus: "signedOut", profile: {}, connected: false, device: null, devices: [],
+    sessions: [], models: [], workspaces: [], features: {}, catalogs: {},
+    draftConfig: {}, config: {}, records: [], session: null, automation: null,
+    sending: false, connecting: false, loading: false, loadingOlder: false,
+    hasOlder: false, olderError: null, historyError: null, preferredDevice: "", view: "home",
+  });
+  state.automationExpanded.clear();
 }

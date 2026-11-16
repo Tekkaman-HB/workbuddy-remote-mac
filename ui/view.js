@@ -1,10 +1,10 @@
 /**
  * [INPUT]: 依赖共享 state、tasks 时间投影、automations 卡片、catalog 多语言名称、消息渲染、history-scroll 锚点与图标。
- * [OUTPUT]: 身份聚合侧栏、右侧未读/真实时间、普通聊天与自动化日期卡片、稳定折叠及连接状态 DOM。
+ * [OUTPUT]: 明确登录入口与身份聚合侧栏、右侧未读/真实时间、普通聊天与自动化日期卡片、稳定折叠及连接状态 DOM。
  * [POS]: UI 的主要视图；操作由 controller.js 和 app.js 协调。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, escapeHTML as esc, visibleSessions, relativeDate, isRunning } from "./state.js";
+import { state, $, escapeHTML as esc, visibleSessions, relativeDate, isRunning, accountName } from "./state.js";
 import { icon } from "./icons.js";
 import { modelId, modelName, workspaceName, workspacePath, catalogName } from "./catalog.js";
 import { blocks, assistantReply, messageActions } from "./render.js";
@@ -62,14 +62,13 @@ export function renderSidebar() {
     spaces
       .map(({w, i}) => `<button class="space-row" data-workspace-view="${i}" title="${esc(workspacePath(w))}">${icon("folder")}<span>${esc(workspaceName(w))}</span></button>`)
       .join("");
-  $("#profile-name").textContent =
-    state.profile.nickname ?? state.profile.displayName ?? state.profile.name ?? "WorkBuddy 用户";
+  $("#profile-name").textContent = accountName();
   const name = $("#profile-name").textContent;
-  const avatar = state.profile.avatarUrl ?? state.profile.avatar;
+  const avatar = state.authStatus === "signedIn" ? state.profile.avatarUrl ?? state.profile.avatar : null;
   $(".avatar").innerHTML =
     typeof avatar === "string" && /^https:\/\//.test(avatar)
       ? `<img src="${esc(avatar)}" alt="">`
-      : esc(name.slice(0, 1));
+      : esc(state.authStatus === "signedIn" ? name.slice(0, 1) : "W");
   document.body.classList.toggle("connected", state.connected);
   $("#device-button").title = state.device
     ? `${state.device.displayName} · ${state.connected ? "已连接" : "未连接"}`

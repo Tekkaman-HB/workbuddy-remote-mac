@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 WebKit 的独立浏览器会话和 lib/wire.mjs。
- * [OUTPUT]: 提供登录/设备、网络阶段错误、单飞连接检查与只读瞬断单次恢复、已读回执、受限调用和模型展示字段及点击附件后的产物定位。
+ * [OUTPUT]: 提供明确的账号认证状态、登录/设备、网络阶段错误、单飞连接检查与只读瞬断单次恢复、已读回执、受限调用和模型展示字段及点击附件后的产物定位。
  * [POS]: MacApp 的账号与协议边界，被原生入口和本地页面桥使用。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
@@ -35,6 +35,7 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var userID = ""
     private(set) var targetID = ""
     private(set) var profile: [String: Any] = [:]
+    private(set) var authStatus = "unknown"
     var onPageReady: (() -> Void)?
     private var wireReady = false
     private var targetInfo: [String: Any]?
@@ -83,6 +84,7 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         options.signal = controller.signal;
         try {
           const response = await fetch(route, options);
+          if (response.status === 401) throw new Error('AUTH_REQUIRED');
           if (!response.ok) throw new Error('HTTP_'+response.status);
           const payload = await response.json();
           if (payload.code !== undefined && payload.code !== 0) throw new Error('API_'+payload.code);
@@ -93,10 +95,15 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
           throw error;
         } finally { clearTimeout(timer); }
         """
-        guard let value = try await run(script, ["route": route, "uid": userID, "body": body.map { $0 as Any } ?? NSNull()]) as? [String: Any] else {
-            throw RemoteFailure.message("接口返回格式不符合预期")
+        do {
+            guard let value = try await run(script, ["route": route, "uid": userID, "body": body.map { $0 as Any } ?? NSNull()]) as? [String: Any] else {
+                throw RemoteFailure.message("接口返回格式不符合预期")
+            }
+            return value
+        } catch {
+            if error.localizedDescription.contains("AUTH_REQUIRED") {forgetAccount()}
+            throw error
         }
-        return value
     }
 
     func devices() async throws -> [[String: Any]] {
@@ -104,9 +111,11 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         let accounts = account["accounts"] as? [[String: Any]] ?? []
         guard let selected = accounts.first(where: {($0["type"] as? String) == "personal"}) ?? accounts.first,
               let uid = selected["uid"] as? String, !uid.isEmpty else {
-            throw RemoteFailure.message("尚未取得账号，请完成官网扫码登录和账号选择。")
+            forgetAccount()
+            throw RemoteFailure.message("AUTH_REQUIRED")
         }
         userID = uid
+        authStatus = "signedIn"
         profile = Dictionary(uniqueKeysWithValues: ["uid", "name", "nickname", "displayName", "avatar", "avatarUrl"].compactMap { key in
             selected[key].map { (key, $0) }
         })
@@ -196,10 +205,14 @@ final class SessionBridge: NSObject, WKNavigationDelegate, WKUIDelegate {
         targetInfo = nil
     }
 
+    private func forgetAccount() {
+        authStatus = "signedOut"
+        userID = ""; profile = [:]; targetID = ""; targetInfo = nil
+    }
+
     func clearLogin() async {
         await disconnect()
-        userID = ""
-        profile = [:]
+        forgetAccount()
         wireReady = false
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         await web.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast)

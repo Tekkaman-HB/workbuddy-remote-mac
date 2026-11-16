@@ -109,7 +109,10 @@ final class RemoteDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHand
         let args = body["args"] as? [String: Any] ?? [:]
         Task {
             do {reply(id, value: try await handle(action, args))}
-            catch {reply(id, error: error.localizedDescription)}
+            catch {
+                if bridge.authStatus == "signedOut" {event("authState", ["status": "signedOut", "profile": [:]])}
+                reply(id, error: error.localizedDescription)
+            }
         }
     }
 
@@ -139,6 +142,8 @@ final class RemoteDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHand
         case "ready":
             pageReady = true
             return ["preferredDevice": UserDefaults.standard.string(forKey: "preferredRemoteDevice") ?? ""]
+        case "authStatus":
+            return ["status": bridge.authStatus, "profile": bridge.profile]
         case "devices":
             targets = try await bridge.devices()
             return ["items": targets, "profile": bridge.profile]
@@ -267,7 +272,10 @@ final class RemoteDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHand
                 loginWindow?.orderOut(nil); window.makeKeyAndOrderFront(nil)
                 loginNotice.stringValue = "已登录。"
                 event("signedIn", ["items": targets, "profile": bridge.profile])
-            } catch {loginNotice.stringValue = "读取失败：" + error.localizedDescription}
+            } catch {
+                event("authState", ["status": bridge.authStatus, "profile": bridge.profile])
+                loginNotice.stringValue = bridge.authStatus == "signedOut" ? "请先完成上方的账号登录和账号选择，再读取设备。" : "读取失败：" + error.localizedDescription
+            }
         }
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

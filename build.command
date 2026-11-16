@@ -31,8 +31,8 @@ cat > "$app_dir/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>WorkBuddyRemote</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>WorkBuddyRemote.icns</string>
-<key>CFBundleVersion</key><string>20261115.1</string>
-<key>CFBundleShortVersionString</key><string>0.3.9</string>
+<key>CFBundleVersion</key><string>20261116.1</string>
+<key>CFBundleShortVersionString</key><string>0.3.10</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

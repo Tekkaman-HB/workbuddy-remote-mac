@@ -1,10 +1,10 @@
 /**
  * [INPUT]: 依赖共享 state、受限 rpc、catalog 多语言名称/路径/模型归一、视图和图标。
- * [OUTPUT]: 在线设备/模型/空间菜单、分组任务/空间搜索、受视口约束的异步模型菜单、原版设置排版与主题卡片、原生主题同步、文件列表及指定执行会话的产物预览入口。
+ * [OUTPUT]: 明确登录入口与认证/设备状态、在线设备/模型/空间菜单、分组任务/空间搜索、受视口约束的异步模型菜单、原版设置排版与主题卡片、原生主题同步、文件列表及指定执行会话的产物预览入口。
  * [POS]: UI 的次级交互，实际会话变更交给 app.js。
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
-import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions, relativeDate } from "./state.js";
+import { state, $, native, rpc, listItems, isListResult, escapeHTML as esc, projectedSessions, relativeDate, accountName } from "./state.js";
 import { popoverBounds } from "./popover-position.js";
 import { matchArtifacts } from "./artifacts.js";
 import { icon } from "./icons.js";
@@ -115,11 +115,11 @@ export function deviceMenu(anchor) {
               `<button class="device-card ${d.deviceId === state.device?.deviceId ? "selected" : ""}" data-connect="${esc(d.deviceId)}">${icon("device")}<span><strong>${esc(d.displayName ?? "未命名电脑")}</strong><small class="online">在线${d.deviceId === state.device?.deviceId && state.connected ? " · 已连接" : ""}${d.remoteViewFlag !== 1 ? " · 未启用远程连接" : ""}</small></span>${d.deviceId === state.device?.deviceId && state.connected ? icon("check", "check") : ""}</button>`,
           )
           .join("")
-      : `<div class="empty">${state.devices.length ? "暂无在线设备" : "登录后读取你的 Mac 设备"}</div>`) +
+      : `<div class="empty">${state.authStatus === "signedIn" ? "暂无在线设备" : "登录后连接你的远端 Mac"}</div>`) +
     '<div class="menu-separator"></div>' +
     row("刷新设备", "refreshDevices", "refresh") +
-    row("使用 WorkBuddy 账号登录", "login", "device");
-  popover(anchor, content, 330);
+    (state.authStatus === "signedIn" ? "" : row("使用 WorkBuddy 账号登录", "login", "device"));
+  popover(anchor, content, 330, "devices");
 }
 export function modelMenu(anchor) {
   if (anchorElement === anchor && !$("#popover").hidden) {
@@ -246,18 +246,27 @@ export function workspaceMenu(anchor) {
   render();
 }
 export function accountMenu(anchor) {
-  const name = state.profile.nickname ?? state.profile.displayName ?? state.profile.name ?? "WorkBuddy 用户";
+  const signedIn = state.authStatus === "signedIn", name = accountName();
+  const status = signedIn
+    ? state.connected ? `已连接 ${state.device?.displayName ?? "远端 Mac"}` : "已登录，尚未连接远端 Mac"
+    : state.authStatus === "signedOut" ? "尚未登录 WorkBuddy 账号" : "登录状态待确认";
   popover(
     anchor,
-    `<div class="profile-card"><span class="avatar">${esc(name[0])}</span><div><strong>${esc(name)}</strong><small>${esc(state.device?.displayName ?? "尚未连接远端 Mac")}</small></div></div><div class="menu-separator"></div>` +
+    `<div class="profile-card"><span class="avatar">${esc(signedIn ? name[0] : "W")}</span><div><strong>${esc(name)}</strong><small>${esc(status)}</small></div></div><div class="menu-separator"></div>` +
       row("设置", "settings", "settings", "<small>⌘,</small>") +
       row("外观", "appearance", "sun") +
       row("设备连接", "deviceSettings", "device") +
       '<div class="menu-separator"></div>' +
       row("关于 WorkBuddy Remote", "about", "owl") +
-      row("退出登录", "logout", "logout"),
-    320,
+      (signedIn ? row("退出登录", "logout", "logout") : row("登录 WorkBuddy 账号", "login", "device")),
+    320, "account",
   );
+}
+export function refreshAuthMenu() {
+  const p = $("#popover"), kind = p.dataset.kind, anchor = anchorElement;
+  if (p.hidden || p.inert || !anchor || !["account", "devices"].includes(kind)) return;
+  closePopover({immediate: true, restoreFocus: false});
+  if (kind === "account") accountMenu(anchor); else deviceMenu(anchor);
 }
 export function taskMenu(anchor, id) {
   const s = state.sessions.find((x) => x.id === id);
@@ -424,7 +433,7 @@ export function settings(section = "通用") {
       `<h3 class="settings-heading">在线设备</h3>` + card(state.devices.filter(device => device.onlineFlag).map(device => setting(esc(device.displayName ?? "未命名电脑"), device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "在线", `<button class="button" data-connect="${esc(device.deviceId)}" ${device.remoteViewFlag !== 1 ? "disabled" : ""}>${device.deviceId === state.device?.deviceId && state.connected ? "已连接" : "连接"}</button>`)).join("") || '<div class="empty">暂无在线设备</div>');
   } else {
     html = card(setting("字体大小", "", `<div class="font-size-control"><input id="font-size" type="range" min="13" max="20" step="1" aria-label="字体大小" value="${localStorage.getItem("fontSize") ?? 14}"><div><span>小</span><span>默认</span><span>大</span></div></div>`)) +
-      `<h3 class="settings-heading">关于</h3>` + card(setting("WorkBuddy Remote", "0.3.9") + setting("连接状态", state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接", '<button class="button" data-command="deviceSettings">设备连接</button>'));
+      `<h3 class="settings-heading">关于</h3>` + card(setting("WorkBuddy Remote", "0.3.10") + setting("连接状态", state.connected ? "已连接 " + esc(state.device?.displayName) : "尚未连接", '<button class="button" data-command="deviceSettings">设备连接</button>'));
   }
   $("#settings-content").innerHTML = html;
   $("#settings-content").onclick = event => {

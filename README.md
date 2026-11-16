@@ -11,7 +11,7 @@
 [![platform](https://img.shields.io/badge/platform-macOS%2013%2B-000000?logo=apple&logoColor=white)](#)
 [![swift](https://img.shields.io/badge/Swift-AppKit%20%C2%B7%20WebKit-F05138?logo=swift&logoColor=white)](MacApp/)
 [![node](https://img.shields.io/badge/Node.js-22%2B%20%E6%9E%84%E5%BB%BA-339933?logo=nodedotjs&logoColor=white)](package.json)
-[![version](https://img.shields.io/badge/version-0.3.9-blue)](#最近更新)
+[![version](https://img.shields.io/badge/version-0.3.10-blue)](#最近更新)
 [![tests](https://img.shields.io/badge/tests-45%20%E9%A1%B9%E9%80%9A%E8%BF%87-brightgreen)](tests/)
 
 </div>
@@ -120,6 +120,8 @@ zsh build.command   # 产出通用二进制 dist/WorkBuddy Remote.app（arm64 + 
 </details>
 
 ## 最近更新
+
+**0.3.10** —— 修复未登录仍显示退出登录；左下角账号菜单直接登录，区分认证状态、设备离线与网络错误，登录后选择远端 Mac。
 
 **0.3.9** —— 阅读成功后同步远端已读状态，修复普通会话和定时任务绿点不消失；同版本回执避免刷新回亮，新活动仍提示未读。
 
