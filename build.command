@@ -1,12 +1,12 @@
 #!/bin/zsh
 # [INPUT]: 依赖 Xcode Command Line Tools、Node.js、内置 UI、Swift 源码和独立 wire.mjs。
-# [OUTPUT]: 生成 dist/WorkBuddy Remote.app，可独立运行，不依赖本机 WorkBuddy。
+# [OUTPUT]: 生成 dist/WorkBuddy Remote.app（通用二进制 arm64 + x86_64），可独立运行，不依赖本机 WorkBuddy。
 # [POS]: 项目根目录的原生应用构建入口。
 # [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 set -eu
 cd "${0:A:h}"
 app_dir="dist/WorkBuddy Remote.app"
-mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" work/swift-module-cache
+mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" work/swift-module-cache work/swift-build/arm64 work/swift-build/x86_64
 npm run build:ui
 mkdir -p "$app_dir/Contents/Resources/UI/assets"
 cp work/ui-build/app.js ui/preview-theme.js ui/index.html ui/*.css "$app_dir/Contents/Resources/UI/"
@@ -14,9 +14,13 @@ rm -f "$app_dir/Contents/Resources/UI/assets/mascot.png"
 cp ui/assets/WorkBuddyRemote.icns "$app_dir/Contents/Resources/WorkBuddyRemote.icns"
 cp ui/assets/brand-mark.svg "$app_dir/Contents/Resources/UI/assets/brand-mark.svg"
 rm -f "$app_dir/Contents/Resources/icon.icns"
-xcrun swiftc -target "$(uname -m)-apple-macosx13.0" -parse-as-library -module-cache-path work/swift-module-cache \
-  -framework AppKit -framework WebKit MacApp/SessionBridge.swift MacApp/ArtifactDownload.swift MacApp/ArtifactPreview.swift MacApp/RemoteApp.swift \
-  -o "$app_dir/Contents/MacOS/WorkBuddyRemote"
+for arch in arm64 x86_64; do
+  xcrun swiftc -target "${arch}-apple-macosx13.0" -parse-as-library -module-cache-path work/swift-module-cache \
+    -framework AppKit -framework WebKit MacApp/SessionBridge.swift MacApp/ArtifactDownload.swift MacApp/ArtifactPreview.swift MacApp/RemoteApp.swift \
+    -o "work/swift-build/${arch}/WorkBuddyRemote"
+done
+lipo -create -output "$app_dir/Contents/MacOS/WorkBuddyRemote" \
+  work/swift-build/arm64/WorkBuddyRemote work/swift-build/x86_64/WorkBuddyRemote
 cp lib/wire.mjs "$app_dir/Contents/Resources/wire.mjs"
 cat > "$app_dir/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

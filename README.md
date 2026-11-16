@@ -12,7 +12,7 @@
 [![swift](https://img.shields.io/badge/Swift-AppKit%20%C2%B7%20WebKit-F05138?logo=swift&logoColor=white)](MacApp/)
 [![node](https://img.shields.io/badge/Node.js-22%2B%20%E6%9E%84%E5%BB%BA-339933?logo=nodedotjs&logoColor=white)](package.json)
 [![version](https://img.shields.io/badge/version-0.3.9-blue)](#最近更新)
-[![tests](https://img.shields.io/badge/tests-29%20%E9%A1%B9%E9%80%9A%E8%BF%87-brightgreen)](tests/)
+[![tests](https://img.shields.io/badge/tests-45%20%E9%A1%B9%E9%80%9A%E8%BF%87-brightgreen)](tests/)
 
 </div>
 
@@ -49,8 +49,10 @@ WorkBuddy Remote 是一个**非官方、独立实现**的 macOS 客户端：
 ```sh
 npm ci --ignore-scripts
 npm test            # 自动测试
-zsh build.command   # 产出 dist/WorkBuddy Remote.app
+zsh build.command   # 产出通用二进制 dist/WorkBuddy Remote.app（arm64 + x86_64）
 ```
+
+发布新版本：在 `build.command` 提升版本号并提交推送后，填写 `work/release-notes-<版本>.md`（首次运行会生成草稿），再执行 `zsh release.command` —— 自动完成版本未发布、工作区干净同步、说明就绪、测试通过四道闸门，构建校验产物版本与架构，检测到 Developer ID 证书与公证凭证时自动签名公证，最后打 tag 并上传 GitHub Release。
 
 ## 架构与安全边界
 
@@ -113,7 +115,7 @@ zsh build.command   # 产出 dist/WorkBuddy Remote.app
 - 已移除语音、控制端附件上传、资料库/助理管理、通知、账户套餐和未接入的主机设置
 - HTML 预览不支持外部数据请求、任意本地路径、相对依赖文件与完整文件编辑器；部分依赖这些能力的网页可能显示不完整
 - 未对用户业务任务做删除、归档或权限变更的实机写入测试；长期睡眠/切网恢复仍需继续验证
-- App 仅本机签名，未做 Developer ID 公证，当前构建为本机 CPU 架构
+- App 仅本机签名，未做 Developer ID 公证；配置证书后 release.command 会自动签名、公证并附加票据
 
 </details>
 

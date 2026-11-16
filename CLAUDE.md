@@ -13,7 +13,8 @@ work/ - 私有取证、临时凭证与构建缓存，不进入版本控制
 <config>
 README.md - 使用说明与独立客户端边界
 verify.command - macOS 一键只读验证入口
-build.command - 编译并本机签名独立 macOS App
+build.command - 编译通用二进制（arm64 + x86_64）并本机签名独立 macOS App
+release.command - 一键发布：闸门校验、测试、构建、可选公证并上传 GitHub Release
 package.json / package-lock.json - UI 构建与锁定的 Markdown、安全净化依赖
 .gitignore - 排除私有工作数据、构建产物和缓存
 </config>
